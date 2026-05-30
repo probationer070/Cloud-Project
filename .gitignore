@@ -1,0 +1,16 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# 정리자료는 제외
+정리자료/
+
+# Ignore claude file
+# /.claude
+# /.agents
+# skills-lock.json
+
+# Ignore Terraform variable definitions
+terraform.tfvars   
+*.tfvars

@@ -1,0 +1,5 @@
+[
+  { "id": "001", "timestamp": "2025-05-27T09:00:00", "value": 100, "category": "A" },
+  { "id": "002", "timestamp": "2025-05-27T09:01:00", "value": 200, "category": "B" },
+  { "id": "003", "timestamp": "2025-05-27T09:02:00", "value": 300, "category": "A" }
+]

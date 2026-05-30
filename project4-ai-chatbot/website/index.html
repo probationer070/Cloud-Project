@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>고객 서비스 챗봇</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .chat-container {
+      width: 420px;
+      height: 680px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 헤더 */
+    .chat-header {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .chat-header .avatar {
+      width: 44px;
+      height: 44px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    .chat-header .info h2 { font-size: 16px; font-weight: 600; }
+    .chat-header .info p  { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+    .status-dot {
+      width: 8px; height: 8px;
+      background: #4ade80;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* 메시지 영역 */
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+
+    .message {
+      max-width: 80%;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .message.user     { align-self: flex-end; }
+    .message.bot      { align-self: flex-start; }
+    .message.system   { align-self: center; }
+
+    .message-bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .message.user  .message-bubble { background: #667eea; color: white; border-bottom-right-radius: 4px; }
+    .message.bot   .message-bubble { background: #f1f3f5; color: #333;  border-bottom-left-radius: 4px; }
+    .message.system .message-bubble {
+      background: #fff3cd;
+      color: #856404;
+      font-size: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .message-time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+      padding: 0 4px;
+    }
+    .message.user .message-time { text-align: right; }
+
+    /* 타이핑 인디케이터 */
+    .typing-indicator {
+      display: none;
+      align-self: flex-start;
+    }
+    .typing-indicator.visible { display: flex; }
+    .typing-bubble {
+      background: #f1f3f5;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      padding: 14px 18px;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      background: #999;
+      border-radius: 50%;
+      animation: typing 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); }
+      30%            { transform: translateY(-6px); }
+    }
+
+    /* 입력 영역 */
+    .chat-input-area {
+      padding: 16px;
+      border-top: 1px solid #eee;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .chat-input {
+      flex: 1;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 24px;
+      padding: 10px 16px;
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      max-height: 100px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .chat-input:focus { border-color: #667eea; }
+    .send-btn {
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s, opacity 0.2s;
+      flex-shrink: 0;
+    }
+    .send-btn:hover   { transform: scale(1.05); }
+    .send-btn:active  { transform: scale(0.95); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* 에스컬레이션 배너 */
+    .escalation-banner {
+      display: none;
+      background: #ffe0e0;
+      color: #c0392b;
+      padding: 10px 16px;
+      font-size: 13px;
+      text-align: center;
+      border-top: 1px solid #ffb3b3;
+    }
+    .escalation-banner.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="chat-header">
+    <div class="avatar">🤖</div>
+    <div class="info">
+      <h2>고객 서비스 챗봇</h2>
+      <p><span class="status-dot"></span>온라인 · AI 기반 응대</p>
+    </div>
+  </div>
+
+  <div class="chat-messages" id="messages">
+    <div class="message bot">
+      <div class="message-bubble">
+        안녕하세요! 무엇을 도와드릴까요? 😊<br>
+        궁금하신 점이 있으시면 편하게 말씀해 주세요.
+      </div>
+      <div class="message-time">방금</div>
+    </div>
+  </div>
+
+  <div class="typing-indicator" id="typingIndicator">
+    <div class="typing-bubble">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  </div>
+
+  <div class="escalation-banner" id="escalationBanner">
+    📞 상담원 연결을 요청하셨습니다. 잠시만 기다려 주세요.
+  </div>
+
+  <div class="chat-input-area">
+    <textarea
+      class="chat-input"
+      id="messageInput"
+      placeholder="메시지를 입력하세요..."
+      rows="1"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+  // ── 설정 ─────────────────────────────────────────────
+  // terraform apply 후 출력되는 chat_api_endpoint로 교체
+  const API_ENDPOINT = "YOUR_API_ENDPOINT_HERE/chat";
+
+  // 세션 ID: 브라우저 새로고침 시 유지
+  const SESSION_ID = (() => {
+    let id = sessionStorage.getItem("chatbot_session");
+    if (!id) {
+      id = "web-" + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem("chatbot_session", id);
+    }
+    return id;
+  })();
+
+  const messagesEl  = document.getElementById("messages");
+  const inputEl     = document.getElementById("messageInput");
+  const sendBtn     = document.getElementById("sendBtn");
+  const typingEl    = document.getElementById("typingIndicator");
+  const escalBanner = document.getElementById("escalationBanner");
+
+  // ── 메시지 전송 ───────────────────────────────────────
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    appendMessage("user", text);
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+    setLoading(true);
+
+    try {
+      const res = await fetch(API_ENDPOINT, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ message: text, session_id: SESSION_ID }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        appendMessage("bot", data.response);
+        if (data.escalated) {
+          escalBanner.classList.add("visible");
+        }
+      } else {
+        appendMessage("bot", "죄송합니다. 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      }
+    } catch (err) {
+      appendMessage("system", "⚠️ 서버 연결에 실패했습니다. API 엔드포인트를 확인해주세요.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── 메시지 추가 ───────────────────────────────────────
+  function appendMessage(role, text) {
+    const now  = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    const div  = document.createElement("div");
+    div.className = `message ${role}`;
+    div.innerHTML = `
+      <div class="message-bubble">${text.replace(/\n/g, "<br>")}</div>
+      <div class="message-time">${now}</div>
+    `;
+    messagesEl.insertBefore(div, typingEl);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // ── 로딩 상태 ─────────────────────────────────────────
+  function setLoading(loading) {
+    sendBtn.disabled = loading;
+    typingEl.classList.toggle("visible", loading);
+    if (loading) messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  // ── Enter 키 전송 (Shift+Enter = 줄바꿈) ─────────────
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // ── 텍스트 입력 시 높이 자동 조절 ────────────────────
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + "px";
+  });
+</script>
+</body>
+</html>

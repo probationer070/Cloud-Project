@@ -1,0 +1,5 @@
+# Terraform 관련 임시 폴더 및 파일 제외
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
