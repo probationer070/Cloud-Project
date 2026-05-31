@@ -28,7 +28,7 @@ MAX_HISTORY_TURNS = int(os.environ.get("MAX_HISTORY_TURNS", "10"))
 
 dynamodb = boto3.resource("dynamodb")
 sns      = boto3.client("sns")
-bedrock  = boto3.client("bedrock-runtime", region_name=os.environ.get("BEDROCK_REGION", "us-east-1"))
+_bedrock = None  # lazy-initialized only when AI_PROVIDER=bedrock
 
 table = dynamodb.Table(DYNAMODB_TABLE)
 
@@ -77,7 +77,7 @@ def lambda_handler(event, context):
     if len(user_message) > 1000:
         return cors_response(400, {"error": "메시지가 너무 깁니다 (최대 1000자)"})
 
-    print(f"[Chatbot] session={session_id} provider={AI_PROVIDER} msg={user_message[:50]}")
+    print(f"[Chatbot] session={session_id} provider={AI_PROVIDER} len={len(user_message)}")
 
     # 1. 대화 이력 조회
     history = get_history(session_id)
@@ -114,7 +114,6 @@ def lambda_handler(event, context):
         "session_id": session_id,
         "response":   final_response,
         "escalated":  escalate,
-        "provider":   AI_PROVIDER,
         "timestamp":  datetime.now(timezone.utc).isoformat(),
     })
 
@@ -145,15 +144,18 @@ def call_gemini(user_message: str, history: list) -> str:
 
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models"
-        f"/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        f"/{GEMINI_MODEL}:generateContent"
     )
     req = urllib.request.Request(
         url,
         data    = payload,
-        headers = {"Content-Type": "application/json"},
+        headers = {
+            "Content-Type":   "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,  # key in header, not URL
+        },
         method  = "POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=25) as resp:
         result = json.loads(resp.read())
 
     return result["candidates"][0]["content"]["parts"][0]["text"]
@@ -162,6 +164,13 @@ def call_gemini(user_message: str, history: list) -> str:
 ########################################################
 # AI 호출 — Bedrock (Claude)
 ########################################################
+
+def _get_bedrock():
+    global _bedrock
+    if _bedrock is None:
+        _bedrock = boto3.client("bedrock-runtime", region_name=os.environ.get("BEDROCK_REGION", "us-east-1"))
+    return _bedrock
+
 
 def call_bedrock(user_message: str, history: list) -> str:
     messages = []
@@ -177,7 +186,7 @@ def call_bedrock(user_message: str, history: list) -> str:
         "messages":          messages,
     })
 
-    resp = bedrock.invoke_model(
+    resp = _get_bedrock().invoke_model(
         modelId     = BEDROCK_MODEL_ID,
         body        = body,
         contentType = "application/json",
@@ -268,12 +277,15 @@ def notify_escalation(session_id: str, last_message: str):
 # CORS 응답 헬퍼
 ########################################################
 
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
+
+
 def cors_response(status_code: int, body: dict) -> dict:
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type":                "application/json",
-            "Access-Control-Allow-Origin":  "*",
+            "Access-Control-Allow-Origin":  ALLOWED_ORIGIN,
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         },

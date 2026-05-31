@@ -1,10 +1,12 @@
 .terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+# .terraform.lock.hcl
 
-# 정리자료는 제외
+# 제외항목
 정리자료/
+api.txt
+gstack/
 
 # Ignore claude file
 # /.claude

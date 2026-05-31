@@ -27,10 +27,15 @@ resource "aws_iam_role_policy" "chatbot" {
     Version = "2012-10-17"
     Statement = [
       {
-        # CloudWatch Logs
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws:logs:*:*:*"
+        # CloudWatch Logs — scoped to this function's log group only
+        Effect = "Allow"
+        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = [
+          "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-chatbot",
+          "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-chatbot:*",
+          "arn:aws:logs:${var.aws_region}:*:log-group:/aws/apigateway/${var.project_name}",
+          "arn:aws:logs:${var.aws_region}:*:log-group:/aws/apigateway/${var.project_name}:*",
+        ]
       },
       {
         # DynamoDB: 대화 이력 읽기/쓰기

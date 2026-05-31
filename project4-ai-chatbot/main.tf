@@ -83,8 +83,9 @@ resource "aws_lambda_function" "chatbot" {
   runtime          = "python3.12"
   filename         = data.archive_file.chatbot.output_path
   source_code_hash = data.archive_file.chatbot.output_base64sha256
-  timeout          = 30
+  timeout          = 45
   memory_size      = 256
+  architectures    = ["arm64"]
 
   environment {
     variables = {
@@ -101,6 +102,7 @@ resource "aws_lambda_function" "chatbot" {
       SNS_TOPIC_ARN     = aws_sns_topic.alerts.arn
       COMPANY_NAME      = var.company_name
       MAX_HISTORY_TURNS = "10"
+      ALLOWED_ORIGIN    = "https://${aws_cloudfront_distribution.ui.domain_name}"
     }
   }
 
@@ -142,6 +144,16 @@ resource "aws_apigatewayv2_stage" "chatbot" {
   # API 액세스 로그
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_access.arn
+    format = jsonencode({
+      requestId          = "$context.requestId"
+      sourceIp           = "$context.identity.sourceIp"
+      requestTime        = "$context.requestTime"
+      httpMethod         = "$context.httpMethod"
+      routeKey           = "$context.routeKey"
+      status             = "$context.status"
+      responseLength     = "$context.responseLength"
+      integrationLatency = "$context.integrationLatency"
+    })
   }
 
   tags = var.common_tags

@@ -15,9 +15,16 @@ data "aws_iam_policy_document" "lambda_assume_role" {
 
 locals {
   log_policy = {
-    Effect   = "Allow"
-    Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-    Resource = "arn:aws:logs:*:*:*"
+    Effect = "Allow"
+    Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+    Resource = [
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-backup",
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-backup:*",
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-cleanup",
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-cleanup:*",
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-restore",
+      "arn:aws:logs:${var.aws_region}:*:log-group:/aws/lambda/${var.project_name}-restore:*",
+    ]
   }
 }
 

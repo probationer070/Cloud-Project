@@ -15,13 +15,13 @@ variable "project_name" {
 variable "suffix" {
   description = "S3 버킷 이름 고유화"
   type        = string
-  default     = "yourname-20250527" # ← 반드시 변경
+  default     = "jaehwan-20260528" # ← 반드시 변경
 }
 
 variable "alert_email" {
   description = "상담원 연결 알림 수신 이메일"
   type        = string
-  default     = "your@email.com" # ← 반드시 변경
+  default     = "qkrwoghks0717@gmail.com" # ← 반드시 변경
 }
 
 variable "company_name" {
@@ -44,7 +44,7 @@ variable "gemini_api_key" {
   description = "Google AI Studio API Key (ai_provider=gemini 시 필요)"
   type        = string
   sensitive   = true      # terraform plan 출력에서 숨김
-  default     = ""        # ← Gemini 사용 시 반드시 입력
+  default     = ""        # ← Gemini 사용 시 반드시 입력 이거 이래도 돼?
 }
 
 variable "gemini_model" {

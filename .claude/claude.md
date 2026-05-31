@@ -72,17 +72,21 @@ Specialized sub-agent specifications live in `.agents/`. Each file defines a foc
 and output format. Read the relevant agent file(s) before starting a task, then run its checklist
 against your changes before committing.
 
+The active project is **P4 (AI Chatbot)**; P1–P3 are reused building blocks whose
+architecture is documented under `docs/design/`.
+
 **Decision matrix — which agents to consult:**
 
 | Change Type | Agents to Consult |
 |-------------|-------------------|
-| New file or directory | `file-structure` |
-| Any Python edit | `code-reviewer` |
-| New data structure / dict across functions | `dataclass` |
-| Terraform resource add/change | `architecture`, `security` |
+| Terraform resource add/change | `security` |
 | IAM role or policy change | `security` |
+| New Lambda env var or external input | `security` |
 | Planned rewrite or 3+ duplicate patterns | `refactoring` |
-| Pre-deploy review | `security`, `architecture` |
+| Function > 40 lines or 4+ nesting levels | `refactoring` |
+| New feature, plan, or design decision | `idea-management` |
+| `docs/todo.md` or design doc out of sync | `idea-management` |
+| Pre-deploy review | `security`, `refactoring` |
 
 **Severity protocol:**
 - `[BLOCK]` finding → fix before proceeding, no exceptions

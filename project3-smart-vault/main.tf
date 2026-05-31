@@ -573,15 +573,22 @@ resource "aws_cloudwatch_dashboard" "vault" {
 # 테스트용 EC2 인스턴스 (백업 대상)
 ########################################################
 
-# VPC/서브넷은 계정 기본값 사용
-data "aws_vpc" "default" {
-  default = true
+# 계정에 기본 VPC가 없으므로 테스트용 VPC/서브넷을 직접 생성
+resource "aws_vpc" "test" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    Name      = "smart-vault-test-vpc"
+    ManagedBy = "terraform"
+  }
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_subnet" "test" {
+  vpc_id            = aws_vpc.test.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "${var.aws_region}a"
+  tags = {
+    Name      = "smart-vault-test-subnet"
+    ManagedBy = "terraform"
   }
 }
 
@@ -599,6 +606,7 @@ data "aws_ami" "amazon_linux" {
 resource "aws_instance" "backup_target" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t3.micro"
+  subnet_id     = aws_subnet.test.id
 
   tags = {
     Name        = "smart-vault-test-server"
