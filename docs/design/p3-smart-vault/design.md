@@ -41,6 +41,9 @@ P4 borrows P3's **SNS email-notification pattern** for agent handoff: when the
 chatbot detects an escalation request, it publishes to an SNS topic that emails
 a human agent — the same topic/subscription wiring P3 uses for backup reports.
 
+> **인프라 독립성:** P4는 P3의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
+> 자체 SNS 토픽을 직접 생성합니다. P3을 배포하지 않아도 P4는 정상 작동합니다.
+
 ---
 
 > The sections below were the original root `README.md` for P3, preserved here.

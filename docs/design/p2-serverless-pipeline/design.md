@@ -56,3 +56,6 @@ P4 borrows P2's **DynamoDB pattern** for conversation history:
 (P2 uses `ttl`; P4's `p4-chatbot-sessions` uses a 24-hour `ttl` for cost control).
 P2's API-Gateway-to-Lambda (AWS_PROXY) wiring is the same model P4 uses for its
 `POST /chat` endpoint.
+
+> **인프라 독립성:** P4는 P2의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
+> 자체 DynamoDB 테이블과 API Gateway를 직접 생성합니다. P2를 배포하지 않아도 P4는 정상 작동합니다.

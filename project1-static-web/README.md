@@ -1,114 +1,155 @@
-# Project 1: 보안/성능 최적화 정적 웹사이트
+# Project 1: Secure Static Website (S3 + CloudFront + WAF)
 
-## 아키텍처
+> **Standalone project** — P2, P3, and P4 do not need to be deployed.
+
+## Architecture
+
 ```
-사용자 → CloudFront (WAF) → S3 (비공개)
-                ↓
-         CloudWatch 알람 → SNS → 이메일
+User request
+    → WAF Web ACL (SQLi/XSS block, IP reputation, rate limit 2000req/5min)
+    → CloudFront (HTTPS enforced, cache TTL 1h, 404/403 → index.html)
+    → S3 (private bucket, accessible only via CloudFront OAC)
+         ↓
+    CloudWatch alarms (4xx > 5%, 5xx > 1%, WAF blocks > 100/5min)
+         → SNS → email
 ```
 
-## 구성 리소스
-| 리소스 | 역할 | Free Tier |
-|--------|------|-----------|
-| S3 | 정적 파일 저장 | 5GB / 20,000 GET 무료 |
-| CloudFront | 글로벌 CDN + HTTPS | 1TB 전송 무료 |
-| WAF | SQL인젝션/XSS/봇 차단 | ⚠️ $5/월 (Web ACL) |
-| ACM | SSL 인증서 | 무료 |
-| CloudWatch | 모니터링 + 알람 | 10개 알람 무료 |
-| SNS | 이메일 알림 | 1,000건 무료 |
+## Estimated Cost
 
-**예상 비용: WAF $5~6/월** (나머지는 Free Tier)
+| Service | Free Tier | Note |
+|---------|-----------|------|
+| S3 | 5 GB / 20,000 GET | free |
+| CloudFront | 1 TB transfer | free |
+| WAF | none | **~$5–6/mo (Web ACL)** |
+| CloudWatch | 10 alarms | free |
+| SNS | 1,000 notifications | free |
+
+> Disabling WAF brings the cost to ~$0/mo. Always `terraform destroy` after testing.
 
 ---
 
-## 시작 전 준비
+## Deployment Steps
 
-### 1. variables.tf 수정 (필수)
+### Step 1. Edit variables.tf
+
 ```hcl
-# 아래 두 값을 반드시 본인 것으로 변경
-bucket_name = "p1-static-web-홍길동-20250527"  # 전 세계 고유한 이름
-alert_email = "your@email.com"
+bucket_name = "p1-static-web-yourname-20260527"  # ← globally unique name (required)
+alert_email = "your@email.com"                    # ← alarm notification email (required)
 ```
 
-### 2. AWS CLI 인증 확인
-```bash
-aws sts get-caller-identity
-# 본인 계정 ID가 출력되면 OK
-```
+### Step 2. Deploy Infrastructure
 
----
-
-## 배포 순서
-
-### Step 1. Terraform 초기화
-```bash
+```powershell
 cd project1-static-web
 terraform init
+terraform plan    # review ~15 resources to be created
+terraform apply   # type "yes"
 ```
 
-### Step 2. 배포 미리보기
-```bash
-terraform plan
-# 생성될 리소스 목록 확인 (약 15개)
+> CloudFront deployment takes **5–10 minutes**. Wait for it to complete before the next step.
+
+After `terraform apply` completes, note the outputs:
+
+```
+cloudfront_domain          = "https://d1234abcd.cloudfront.net"
+cloudfront_distribution_id = "E28GYOHPUO7JUU"
+s3_bucket_name             = "p1-static-web-yourname-20260527"
+upload_command             = "aws s3 sync ./website/ s3://.../ --delete"
 ```
 
-### Step 3. 배포 실행
-```bash
-terraform apply
-# "yes" 입력
-# ⏱️ 약 5~10분 소요 (CloudFront 배포가 가장 오래 걸림)
+### Step 3. Confirm SNS Email Subscription
+
+An **"AWS Notification - Subscription Confirmation"** email will arrive at `alert_email` right after `apply`.
+**Click "Confirm subscription"** — without this, alarm emails will not be sent.
+
+### Step 4. Upload Static Files to S3
+
+```powershell
+# Run the upload_command from Step 2
+aws s3 sync ./website/ s3://[s3_bucket_name]/ --delete
 ```
 
-### Step 4. 정적 파일 업로드
-```bash
-# apply 완료 후 출력된 upload_command 복사해서 실행
-aws s3 sync ./website/ s3://[버킷이름]/ --delete
+Place your HTML/CSS/JS files in the `website/` folder. `index.html` is the default entry point.
+
+### Step 5. Open in Browser
+
+```
+Open the cloudfront_domain URL from Step 2
+e.g. https://d1234abcd.cloudfront.net
 ```
 
-### Step 5. 접속 확인
-```bash
-# apply 완료 후 출력된 cloudfront_domain으로 브라우저 접속
-# 예: https://d1234abcd.cloudfront.net
-```
-
-### Step 6. SNS 이메일 구독 확인
-- apply 직후 alert_email로 "AWS Notification - Subscription Confirmation" 메일 수신
-- **메일 내 "Confirm subscription" 클릭 필수** (안 하면 알람 이메일 안 옴)
+> **Direct S3 URL returns 403** — the bucket is private by design.
 
 ---
 
-## 검증 체크리스트
-- [ ] CloudFront URL로 https 접속 성공
-- [ ] http 접속 시 https로 자동 리다이렉트 확인
-- [ ] S3 직접 URL 접속 시 AccessDenied 확인 (보안 정상)
-- [ ] SNS 구독 이메일 확인
-- [ ] CloudWatch 대시보드에서 요청 수 확인
+## Test Scenarios
+
+### 1. HTTPS Access
+
+Open `cloudfront_domain` in a browser → page loads correctly.
+
+### 2. HTTP → HTTPS Redirect
+
+```powershell
+curl.exe -I http://d1234abcd.cloudfront.net
+# Expected: HTTP/2 301 → Location: https://...
+```
+
+### 3. S3 Direct Access Block (Security Check)
+
+AWS Console → S3 → bucket → select a file → copy "Object URL" → open in browser
+→ **403 AccessDenied** is the correct response (OAC security working).
+
+### 4. CloudFront Cache Invalidation (After File Updates)
+
+```powershell
+aws cloudfront create-invalidation `
+  --distribution-id [cloudfront_distribution_id] `
+  --paths "/*"
+```
+
+### 5. CloudWatch Dashboard
+
+```
+Open cloudwatch_dashboard_url from terraform output
+→ Check request count, error rate, cache hit rate, WAF block graphs
+```
 
 ---
 
-## 리소스 삭제 (테스트 완료 후)
-```bash
-# S3 버킷 비우기 (파일 있으면 destroy 실패)
-aws s3 rm s3://[버킷이름] --recursive
+## Validation Checklist
 
-# 전체 삭제
+- [ ] `terraform output` shows `cloudfront_domain` and `s3_bucket_name`
+- [ ] SNS subscription confirmation email received → clicked "Confirm subscription"
+- [ ] CloudFront URL loads over HTTPS
+- [ ] HTTP → HTTPS redirect returns 301
+- [ ] S3 direct URL returns 403 AccessDenied
+- [ ] CloudWatch dashboard shows request count graph
+
+---
+
+## Common Errors
+
+**S3 bucket name already exists**
+→ Change `bucket_name` to a more unique value (include your name and date)
+
+**CloudFront 403 after deploy**
+→ Verify files were uploaded in Step 4
+→ If files are present, run a CloudFront cache invalidation
+
+**WAF rule error (AWSManagedRulesManagedRuleSet)**
+→ Comment out the `AWSManagedRulesAmazonIpReputationList` block in `main.tf` and retry
+
+---
+
+## Destroy Resources
+
+```powershell
+# 1. Empty S3 bucket (destroy fails if files remain)
+aws s3 rm s3://[s3_bucket_name] --recursive
+
+# 2. Destroy Terraform resources
 terraform destroy
-# "yes" 입력
 ```
 
-> ⚠️ WAF는 삭제까지 몇 분 걸릴 수 있음. 에러 시 재시도.
-
----
-
-## 자주 발생하는 오류
-
-### S3 bucket name already exists
-→ `bucket_name` 을 더 고유하게 변경
-
-### WAF rule 오류 (AWSManagedRulesManagedRuleSet)
-→ main.tf에서 규칙 2 (AWSManagedRulesAmazonIpReputationList) 블록 주석 처리 후 재시도
-→ 실제 규칙명: `AWSManagedRulesAmazonIpReputationList`
-
-### CloudFront 배포 후 403 에러
-→ S3 파일 업로드 확인
-→ 캐시 무효화: `aws cloudfront create-invalidation --distribution-id [ID] --paths '/*'`
+> WAF deletion can take several minutes. Retry if it errors out.

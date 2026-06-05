@@ -58,6 +58,12 @@ resource "aws_iam_role_policy" "chatbot" {
         Resource = aws_sns_topic.alerts.arn
       },
       {
+        # SSM: Gemini API 키 조회 (AI_PROVIDER=gemini 시 사용)
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/cloud-portfolio/gemini-api-key"
+      },
+      {
         # Bedrock: Claude 모델 호출 (AI_PROVIDER=bedrock 시 사용)
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]

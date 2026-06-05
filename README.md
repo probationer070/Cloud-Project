@@ -1,7 +1,9 @@
 # Cloud Project — AWS 실습 포트폴리오 (P1–P4)
 
-Terraform으로 프로비저닝하는 4개의 AWS 프로젝트. 각 프로젝트는 독립 배포 가능하며,
-**P4(AI 챗봇)** 는 P1~P3의 패턴을 재사용하는 플래그십 프로젝트입니다.
+Terraform으로 프로비저닝하는 4개의 AWS 프로젝트.
+
+**각 프로젝트는 완전히 독립적입니다** — 서로의 배포 인프라에 의존하지 않으며, 어떤 순서로든 단독 배포·삭제할 수 있습니다.
+**P4(AI 챗봇)** 는 P1~P3의 Terraform 패턴(코드 구조)을 참고했지만, 필요한 모든 리소스(S3·CloudFront·DynamoDB·SNS 등)를 자체적으로 프로비저닝합니다. **P4 테스트에 P1·P2·P3을 배포할 필요가 없습니다.**
 
 > **개발 환경 설정** → [`CONTRIBUTING.md`](CONTRIBUTING.md) — 로컬 초기화(`init-all.ps1` / `init-all.sh`), AWS 자격증명, CI 워크플로우
 
@@ -137,12 +139,12 @@ CloudWatch 알람 (에러·응답지연 10초 초과) → SNS → 이메일
 | CloudFront | 웹 UI HTTPS 제공, CORS Origin 소스 | 브라우저 접속 시 |
 | CloudWatch | Lambda 에러 수·응답 시간 모니터링 | 5분 집계, 임계값 초과 시 알람 |
 
-**P1~P3 재사용 패턴:**
-- **P1 →** S3 + CloudFront(OAC) 웹 UI 호스팅
-- **P2 →** DynamoDB `PAY_PER_REQUEST` + TTL 자동 만료
-- **P3 →** SNS 이메일 알림 (에스컬레이션)
+**P1~P3 참고 패턴 (코드 패턴만 차용 — 인프라 의존 없음):**
+- **P1 →** S3 + CloudFront(OAC) 웹 UI 호스팅 패턴 (P4가 자체 S3·CloudFront 리소스 생성)
+- **P2 →** DynamoDB `PAY_PER_REQUEST` + TTL 자동 만료 패턴 (P4가 자체 DynamoDB 테이블 생성)
+- **P3 →** SNS 이메일 알림 패턴 (P4가 자체 SNS 토픽 생성)
 
-📄 [P4 전체 빌드 계획](docs/todo.md) · [파일 구조](project4-ai-chatbot/file-structure.md) · [ADR: SSM 자격증명](docs/adr/0001-ssm-parameter-store-for-api-credentials.md)
+📄 [설계 문서](docs/design/p4-ai-chatbot/design.md) · [파일 구조](project4-ai-chatbot/file-structure.md) · [P4 빌드 계획](docs/todo.md) · [ADR: SSM 자격증명](docs/adr/0001-ssm-parameter-store-for-api-credentials.md)
 
 ---
 

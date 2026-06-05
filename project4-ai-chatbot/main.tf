@@ -91,9 +91,9 @@ resource "aws_lambda_function" "chatbot" {
     variables = {
       # ── AI 제공자 설정 ─────────────────────────────
       # "gemini" 또는 "bedrock" 으로 변경하면 즉시 전환
-      AI_PROVIDER      = var.ai_provider
-      GEMINI_API_KEY   = var.gemini_api_key
-      GEMINI_MODEL     = var.gemini_model
+      AI_PROVIDER           = var.ai_provider
+      GEMINI_API_KEY_PATH   = "/cloud-portfolio/gemini-api-key"
+      GEMINI_MODEL          = var.gemini_model
       BEDROCK_MODEL_ID = var.bedrock_model_id
       BEDROCK_REGION   = var.bedrock_region
 

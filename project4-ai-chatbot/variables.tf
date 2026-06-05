@@ -40,17 +40,10 @@ variable "ai_provider" {
 }
 
 # Gemini 설정
-variable "gemini_api_key" {
-  description = "Google AI Studio API Key (ai_provider=gemini 시 필요)"
-  type        = string
-  sensitive   = true      # terraform plan 출력에서 숨김
-  default     = ""        # ← Gemini 사용 시 반드시 입력 이거 이래도 돼?
-}
-
 variable "gemini_model" {
   description = "사용할 Gemini 모델"
   type        = string
-  default     = "gemini-2.5-flash-lite-preview-06-17"
+  default     = "gemma-4-26b-a4b-it"
 }
 
 # Bedrock 설정

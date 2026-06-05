@@ -1,145 +1,232 @@
-# Project 4: 고객 서비스 AI 챗봇
+# Project 4: AI Customer Service Chatbot
 
-## 아키텍처
+> **Standalone project** — P1, P2, and P3 do NOT need to be deployed. P4 creates all its own AWS resources independently.
+
+## Architecture
+
 ```
-[웹 UI]                  [REST API]
- 브라우저                  curl / 외부 앱
+[Web UI]                 [REST API]
+ Browser                  curl / external app
     │                          │
     └──────────┬───────────────┘
                ▼
-        API Gateway (HTTP)
+        API Gateway (HTTP v2)
                ▼
-        Lambda (챗봇 로직)
-        ┌──────────────────────────┐
-        │ 1. 대화 이력 조회         │
-        │ 2. System Prompt 조립     │
-        │ 3. AI 호출 (Gemini/Bedrock)│
-        │ 4. 응답 검증/라우팅       │
-        │ 5. 대화 이력 저장         │
-        └──────────────────────────┘
+        Lambda (chatbot logic)
+        ┌──────────────────────────────────────┐
+        │ 1. Fetch conversation history        │
+        │    (DynamoDB, last 10 turns)         │
+        │ 2. Build prompt                      │
+        │    (System Prompt + history)         │
+        │ 3. Call AI (Gemini / Bedrock)        │
+        │    Gemini key: SSM Parameter Store   │
+        │    (fetched once at cold start)      │
+        │ 4. Route response                    │
+        │    (normal / escalate / profanity)   │
+        │ 5. Save history (DynamoDB, TTL 24h)  │
+        └──────────────────────────────────────┘
              │              │
         DynamoDB         Gemini API
-        (대화 이력)       or Bedrock
+        (history)        or Bedrock
              │
-             ▼ (상담원 연결 시)
-           SNS → 이메일
-```
+             ▼ (on escalation)
+           SNS → email alert
 
-## AI 제공자 전환 방법
-```
-현재: Gemini 2.5 Flash-Lite (무료)
-전환: variables.tf에서 ai_provider = "bedrock" 변경 후 terraform apply
+Web UI: S3 (private) ─ OAC ─▶ CloudFront (HTTPS)
 ```
 
 ---
 
-## 배포 순서
+## Deployment Steps
 
-### Step 1. Gemini API 키 발급
+### Step 1. Get a Gemini API Key
+
 ```
 https://aistudio.google.com/apikey
-  → "Create API Key" 클릭
-  → 키 복사
+  → Click "Create API Key"
+  → Copy the key (starts with AIzaSy...)
 ```
 
-### Step 2. variables.tf 수정
+### Step 2. Store the Gemini API Key in SSM Parameter Store
+
+```powershell
+aws ssm put-parameter `
+  --name "/cloud-portfolio/gemini-api-key" `
+  --value "AIzaSy..." `
+  --type SecureString `
+  --region ap-northeast-2
+```
+
+> Add `--overwrite` if the parameter already exists.
+> Lambda fetches this key once at cold start and caches it for the container lifetime.
+
+### Step 3. Edit variables.tf
+
 ```hcl
-suffix         = "홍길동-20250527"   # ← 변경
-alert_email    = "your@email.com"    # ← 변경
-gemini_api_key = "AIzaSy..."         # ← Gemini API 키 입력
-company_name   = "내 쇼핑몰"         # ← 원하는 이름
+suffix       = "yourname-20260527"   # ← unique suffix for S3 bucket name (required)
+alert_email  = "your@email.com"      # ← email for escalation alerts (required)
+company_name = "My Shop"             # ← name shown in chatbot responses (optional)
 ```
 
-### Step 3. 배포
-```bash
+> `gemini_api_key` is NOT in variables.tf — the key lives in SSM (Step 2).
+
+### Step 4. Deploy Infrastructure
+
+```powershell
+cd project4-ai-chatbot
 terraform init
 terraform plan
 terraform apply
 ```
 
-### Step 4. 웹 UI API 엔드포인트 설정
-```bash
-# terraform apply 완료 후 출력되는 chat_api_endpoint 복사
-# website/index.html 열어서 아래 라인 수정:
-const API_ENDPOINT = "https://xxxxx.execute-api.ap-northeast-2.amazonaws.com/v1/chat";
+After `terraform apply` completes, note the outputs:
+
+```
+chat_api_endpoint          = "https://xxxxx.execute-api.ap-northeast-2.amazonaws.com/v1/chat"
+chatbot_ui_url             = "https://d1234abcd.cloudfront.net"
+ui_upload_command          = "aws s3 sync ./website/ s3://p4-chatbot-ui-.../ --delete"
+cache_invalidation_command = "aws cloudfront create-invalidation ..."
 ```
 
-### Step 5. 웹 UI S3 업로드
-```bash
-# outputs의 ui_upload_command 실행
+### Step 5. Set the API Endpoint in the Web UI
+
+Open `website/index.html` and update this line:
+
+```javascript
+const API_ENDPOINT = "https://xxxxx.execute-api.ap-northeast-2.amazonaws.com/v1/chat";
+//                    ↑ Replace with the chat_api_endpoint value from Step 4
+```
+
+### Step 6. Upload the Web UI to S3
+
+```powershell
+# Run the ui_upload_command from Step 4
 aws s3 sync ./website/ s3://[bucket-name]/ --delete
 
-# CloudFront 캐시 무효화
-aws cloudfront create-invalidation --distribution-id [id] --paths '/*'
+# Run the cache_invalidation_command from Step 4
+aws cloudfront create-invalidation --distribution-id [dist-id] --paths "/*"
 ```
 
-### Step 6. 브라우저 접속
+### Step 7. Open in Browser
+
 ```
-outputs의 chatbot_ui_url 접속
-예: https://d1234abcd.cloudfront.net
+Open the chatbot_ui_url from Step 4
+e.g. https://d1234abcd.cloudfront.net
 ```
 
 ---
 
-## 테스트 시나리오
+## Test Scenarios
 
-### 1. 기본 대화
-```bash
-curl -X POST [chat_api_endpoint] \
-  -H "Content-Type: application/json" \
-  -d '{"message": "반품은 어떻게 하나요?", "session_id": "test-001"}'
+> Run `terraform output` to see the test commands pre-filled with your actual endpoint.
+>
+> **Model:** Gemma 4 26B (`gemma-4-26b-a4b-it`) via Gemini API — free tier limit: 1,500 requests/day.
+
+### 1. Basic Conversation
+
+```powershell
+Invoke-RestMethod `
+  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"message": "How do I process a return?", "session_id": "test-001"}'
 ```
 
-### 2. 대화 이력 연속성 확인
-```bash
-# 같은 session_id로 2번 연속 호출
-# 2번째 메시지에서 1번째 내용을 기억하는지 확인
-curl ... -d '{"message": "주문번호는 12345입니다", "session_id": "test-003"}'
-curl ... -d '{"message": "아까 말한 주문 배송 조회해주세요", "session_id": "test-003"}'
+Expected response:
+```json
+{"response": "To process a return...", "session_id": "test-001", "escalated": false}
 ```
 
-### 3. 상담원 연결 트리거
-```bash
-curl ... -d '{"message": "상담원 연결해주세요", "session_id": "test-002"}'
-# → 응답에 escalated: true
-# → 이메일로 알림 수신 확인
+### 2. Conversation History Continuity
+
+This test also verifies the repeated-response bug is fixed: the second reply must
+reference "12345" from the first message. If it gives a generic response instead,
+history is broken.
+
+```powershell
+# First message
+Invoke-RestMethod `
+  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"message": "My order number is 12345.", "session_id": "test-003"}'
+
+# Second message — response MUST mention "12345" (proves history is retained)
+Invoke-RestMethod `
+  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"message": "What was my order number?", "session_id": "test-003"}'
 ```
 
-### 4. DynamoDB 대화 이력 확인
-```bash
-# outputs의 check_session_history 명령어 실행
-aws dynamodb query --table-name p4-chatbot-sessions \
-  --key-condition-expression 'session_id = :sid' \
-  --expression-attribute-values '{":sid":{"S":"test-003"}}' \
+Expected: second response contains "12345". Conversation history is working correctly.
+
+### 3. Escalation Trigger
+
+```powershell
+Invoke-RestMethod `
+  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"message": "Please connect me with a human agent.", "session_id": "test-002"}'
+```
+
+Expected response:
+```json
+{"response": "... You have requested to speak with an agent...", "escalated": true}
+```
+
+Check that an alert email arrives at `alert_email`.
+
+### 4. Verify DynamoDB History
+
+```powershell
+# Run the check_session_history output command
+aws dynamodb query `
+  --table-name p4-chatbot-sessions `
+  --key-condition-expression "session_id = :sid" `
+  --expression-attribute-values '{\":sid\":{\"S\":\"test-003\"}}' `
   --region ap-northeast-2
 ```
 
 ---
 
-## Bedrock으로 전환 (카드 등록 후)
+## Validation Checklist
+
+- [ ] `terraform output` shows `chat_api_endpoint` and `chatbot_ui_url`
+- [ ] SNS subscription confirmation email received → click "Confirm subscription"
+- [ ] Basic conversation returns a response (`escalated: false`)
+- [ ] Same `session_id` across two calls — second response references first message
+- [ ] "Connect me with an agent" → `escalated: true` + email alert received
+- [ ] DynamoDB shows conversation history (`check_session_history`)
+- [ ] Browser → CloudFront URL → web UI chat works
+- [ ] CloudWatch dashboard (`dashboard_url`) shows invocation and latency graphs
+
+---
+
+## Switch to Bedrock (Optional)
+
 ```hcl
-# variables.tf 수정
+# variables.tf
 ai_provider = "bedrock"
 
-# terraform apply 재실행
+# re-run
 terraform apply
 ```
-비용: 테스트 규모 기준 $1~3
+
+Cost: ~$1–3/mo at test scale. Seoul region does not support Claude — `bedrock_region` defaults to `us-east-1`.
 
 ---
 
-## 검증 체크리스트
-- [ ] curl로 기본 대화 응답 확인
-- [ ] 같은 session_id 연속 호출 시 이전 대화 기억 확인
-- [ ] "상담원 연결" 요청 시 escalated: true + 이메일 알림 수신
-- [ ] DynamoDB에 대화 이력 저장 확인
-- [ ] 브라우저에서 웹 UI 채팅 동작 확인
-- [ ] CloudWatch 대시보드 호출 수 / 응답 시간 그래프 확인
+## Destroy Resources
 
----
-
-## 리소스 삭제
-```bash
+```powershell
+# 1. Empty the S3 bucket
 aws s3 rm s3://[ui-bucket] --recursive
+
+# 2. Destroy Terraform resources
 terraform destroy
 ```
+
+> The SSM parameter is not managed by Terraform. Delete it manually if no longer needed:
+> AWS Console → Systems Manager → Parameter Store → `/cloud-portfolio/gemini-api-key` → Delete

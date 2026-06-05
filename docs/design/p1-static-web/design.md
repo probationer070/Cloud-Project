@@ -41,9 +41,49 @@ User → CloudFront (WAF attached) ──OAC──> S3 (private)
 
 Free-tier friendly; WAF managed rules are the main recurring cost (~$5–6/mo) — disable WAF to reach ~$0 in pure dev.
 
+## Usage
+
+### Prerequisites
+Terraform must already be applied (`terraform apply` from `project1-static-web/`).
+
+### 1. Confirm outputs
+```powershell
+cd project1-static-web
+terraform output
+```
+This prints the bucket name, CloudFront distribution ID, and the ready-to-run commands below.
+
+### 2. Add your files
+Place HTML/CSS/JS in `project1-static-web/website/`. `index.html` is already there as a placeholder.
+
+### 3. Upload to S3
+```powershell
+aws s3 sync ./website/ s3://<bucket_name>/ --delete
+# aws s3 sync ./website/ s3://p1-static-web-jaehwan-20260527/ --delete
+```
+`--delete` removes S3 objects no longer present locally.
+
+### 4. Invalidate CloudFront cache
+```powershell
+aws cloudfront create-invalidation --distribution-id <dist_id> --paths "/*"
+# aws cloudfront create-invalidation --distribution-id E28GYOHPUO7JUU --paths "/*"
+```
+Get `<dist_id>` from `terraform output cloudfront_distribution_id`.
+
+### 5. Access the site
+```powershell
+terraform output cloudfront_domain
+```
+Open the printed URL. **Never use the S3 URL directly** — the bucket is private; direct access returns 403 by design.
+
+---
+
 ## How P4 reuses this
 
 P4 hosts its chatbot web UI on this **S3 + CloudFront** pattern: private bucket,
 OAC origin, HTTPS-only delivery, and the same CloudWatch alarm/SNS wiring for
 front-end monitoring. P4's `website/index.html` deploys the same way
 (`aws s3 sync` + CloudFront invalidation).
+
+> **인프라 독립성:** P4는 P1의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
+> 자체 S3 버킷과 CloudFront 배포를 직접 생성합니다. P1을 배포하지 않아도 P4는 정상 작동합니다.
