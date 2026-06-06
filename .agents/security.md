@@ -24,6 +24,7 @@ Invoke when:
 - [ ] Request bodies validated before being passed to any AWS API call
 - [ ] Every S3 bucket has `public_access_block` (all four flags `true`) and server-side encryption
 - [ ] HTTPS enforced; no `verify=False` on boto3/requests; no full-event logging at INFO
+- [ ] Remote backend (S3 + lock) configured before `terraform apply`; for an already-deployed stack the state is non-empty (empty state on a live stack → re-create/orphan collisions — see ERR-001)
 
 ## Output
 

@@ -1,4 +1,4 @@
-# P1 Design — Static Web (보안/성능 최적화 정적 웹사이트)
+# P1 Design — Static Web (Security/Performance-Optimized Static Website)
 
 **Directory:** `project1-static-web/`
 **Stack:** S3 + CloudFront + WAF + ACM (optional) + CloudWatch + SNS
@@ -85,5 +85,6 @@ OAC origin, HTTPS-only delivery, and the same CloudWatch alarm/SNS wiring for
 front-end monitoring. P4's `website/index.html` deploys the same way
 (`aws s3 sync` + CloudFront invalidation).
 
-> **인프라 독립성:** P4는 P1의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
-> 자체 S3 버킷과 CloudFront 배포를 직접 생성합니다. P1을 배포하지 않아도 P4는 정상 작동합니다.
+> **Infrastructure independence:** P4 does not reference P1's deployed resources. In P4's
+> `main.tf` it creates its own S3 bucket and CloudFront distribution directly. P4 works
+> correctly even if P1 is never deployed.

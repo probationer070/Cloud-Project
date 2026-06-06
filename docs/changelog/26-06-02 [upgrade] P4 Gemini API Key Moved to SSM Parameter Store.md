@@ -28,7 +28,7 @@ ADR 0001 (`docs/adr/0001-ssm-parameter-store-for-api-credentials.md`) had alread
 ```hcl
 # Before
 variable "gemini_api_key" {
-  description = "Google AI Studio API Key (ai_provider=gemini 시 필요)"
+  description = "Google AI Studio API Key (required when ai_provider=gemini)"
   type        = string
   sensitive   = true
 }
@@ -63,7 +63,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 def call_gemini(user_message, history):
     if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY 환경변수가 설정되지 않았습니다")
+        raise ValueError("GEMINI_API_KEY environment variable is not set")
     ...
     "x-goog-api-key": GEMINI_API_KEY,
 

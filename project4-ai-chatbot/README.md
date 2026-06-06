@@ -47,17 +47,12 @@ https://aistudio.google.com/apikey
   → Copy the key (starts with AIzaSy...)
 ```
 
-### Step 2. Store the Gemini API Key in SSM Parameter Store
+### Step 2. Keep Your API Key Handy
 
-```powershell
-aws ssm put-parameter `
-  --name "/cloud-portfolio/gemini-api-key" `
-  --value "AIzaSy..." `
-  --type SecureString `
-  --region ap-northeast-2
-```
+You don't create the SSM parameter by hand — `terraform apply` (Step 4) creates it as a
+KMS-encrypted SecureString **placeholder**. You seed the real key into it right after apply,
+also in Step 4. Just keep the key (`AIzaSy...`) ready for now.
 
-> Add `--overwrite` if the parameter already exists.
 > Lambda fetches this key once at cold start and caches it for the container lifetime.
 
 ### Step 3. Edit variables.tf
@@ -68,7 +63,7 @@ alert_email  = "your@email.com"      # ← email for escalation alerts (required
 company_name = "My Shop"             # ← name shown in chatbot responses (optional)
 ```
 
-> `gemini_api_key` is NOT in variables.tf — the key lives in SSM (Step 2).
+> `gemini_api_key` is NOT in variables.tf — the key lives in SSM (created by Terraform, seeded below).
 
 ### Step 4. Deploy Infrastructure
 
@@ -78,6 +73,29 @@ terraform init
 terraform plan
 terraform apply
 ```
+
+`terraform apply` creates the SSM parameter with a `PLACEHOLDER` value. **Seed your real
+Gemini key into it once** (`--overwrite` is required since the parameter already exists):
+
+**Windows (PowerShell):**
+```powershell
+aws ssm put-parameter `
+  --name "/cloud-portfolio/gemini-api-key" `
+  --value "AIzaSy..." `
+  --type SecureString --overwrite `
+  --region ap-northeast-2
+```
+**Linux / macOS:**
+```bash
+aws ssm put-parameter \
+  --name "/cloud-portfolio/gemini-api-key" \
+  --value "AIzaSy..." \
+  --type SecureString --overwrite \
+  --region ap-northeast-2
+```
+
+> Thanks to `lifecycle { ignore_changes = [value] }`, future `terraform apply` runs never
+> revert your seeded key.
 
 After `terraform apply` completes, note the outputs:
 
@@ -124,12 +142,25 @@ e.g. https://d1234abcd.cloudfront.net
 
 ### 1. Basic Conversation
 
+**Windows (PowerShell):**
 ```powershell
 Invoke-RestMethod `
-  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Uri [bucket-name] `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"message": "How do I process a return?", "session_id": "test-001"}'
+```
+**Linux / macOS:**
+```bash
+curl -X POST [bucket-name] \
+  -H "Content-Type: application/json" \
+  -d '{"message": "How do I process a return?", "session_id": "test-001"}'
+```
+**Windows (curl.exe):**
+```powershell
+curl.exe -X POST [bucket-name] `
+  -H "Content-Type: application/json" `
+  -d '{\"message\": \"How do I process a return?\", \"session_id\": \"test-001\"}'
 ```
 
 Expected response:
@@ -143,32 +174,70 @@ This test also verifies the repeated-response bug is fixed: the second reply mus
 reference "12345" from the first message. If it gives a generic response instead,
 history is broken.
 
+**Windows (PowerShell):**
 ```powershell
 # First message
 Invoke-RestMethod `
-  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Uri [bucket-name] `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"message": "My order number is 12345.", "session_id": "test-003"}'
 
 # Second message — response MUST mention "12345" (proves history is retained)
 Invoke-RestMethod `
-  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Uri [bucket-name] `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"message": "What was my order number?", "session_id": "test-003"}'
+```
+**Linux / macOS:**
+```bash
+# First message
+curl -X POST [bucket-name] \
+  -H "Content-Type: application/json" \
+  -d '{"message": "My order number is 12345.", "session_id": "test-003"}'
+
+# Second message — response MUST mention "12345" (proves history is retained)
+curl -X POST [bucket-name] \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What was my order number?", "session_id": "test-003"}'
+```
+**Windows (curl.exe):**
+```powershell
+# First message
+curl.exe -X POST [bucket-name] `
+  -H "Content-Type: application/json" `
+  -d '{\"message\": \"My order number is 12345.\", \"session_id\": \"test-003\"}'
+
+# Second message — response MUST mention "12345" (proves history is retained)
+curl.exe -X POST [bucket-name] `
+  -H "Content-Type: application/json" `
+  -d '{\"message\": \"What was my order number?\", \"session_id\": \"test-003\"}'
 ```
 
 Expected: second response contains "12345". Conversation history is working correctly.
 
 ### 3. Escalation Trigger
 
+**Windows (PowerShell):**
 ```powershell
 Invoke-RestMethod `
-  -Uri "https://gt7zb6obp8.execute-api.ap-northeast-2.amazonaws.com/v1/chat" `
+  -Uri [bucket-name] `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"message": "Please connect me with a human agent.", "session_id": "test-002"}'
+```
+**Linux / macOS:**
+```bash
+curl -X POST [bucket-name] \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Please connect me with a human agent.", "session_id": "test-002"}'
+```
+**Windows (curl.exe):**
+```powershell
+curl.exe -X POST [bucket-name] `
+  -H "Content-Type: application/json" `
+  -d '{\"message\": \"Please connect me with a human agent.\", \"session_id\": \"test-002\"}'
 ```
 
 Expected response:
@@ -180,12 +249,22 @@ Check that an alert email arrives at `alert_email`.
 
 ### 4. Verify DynamoDB History
 
+**Windows (PowerShell):**
 ```powershell
 # Run the check_session_history output command
 aws dynamodb query `
   --table-name p4-chatbot-sessions `
   --key-condition-expression "session_id = :sid" `
   --expression-attribute-values '{\":sid\":{\"S\":\"test-003\"}}' `
+  --region ap-northeast-2
+```
+**Linux / macOS:**
+```bash
+# Run the check_session_history output command
+aws dynamodb query \
+  --table-name p4-chatbot-sessions \
+  --key-condition-expression "session_id = :sid" \
+  --expression-attribute-values '{":sid":{"S":"test-003"}}' \
   --region ap-northeast-2
 ```
 
@@ -228,5 +307,5 @@ aws s3 rm s3://[ui-bucket] --recursive
 terraform destroy
 ```
 
-> The SSM parameter is not managed by Terraform. Delete it manually if no longer needed:
-> AWS Console → Systems Manager → Parameter Store → `/cloud-portfolio/gemini-api-key` → Delete
+> The SSM parameter **is** now managed by Terraform, so `terraform destroy` removes it along
+> with everything else — no manual console deletion needed.

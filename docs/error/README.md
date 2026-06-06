@@ -36,4 +36,5 @@ Records are written after the fix is confirmed. They answer three questions:
 
 | ID | Date | Component | Summary | Status |
 |----|------|-----------|---------|--------|
-| — | — | — | No errors recorded yet | — |
+| [ERR-001](ERR-001-local-state-not-shared-across-machines.md) | 2026-06-06 | `project4-ai-chatbot/` (local state) | `apply` on desktop hit 5 `*AlreadyExists` errors — local state never synced from laptop; fixed with S3 remote backend + `bootstrap/` | Resolved (laptop cross-check pending) |
+| [ERR-002](ERR-002-terraform-destroy-noop-empty-state.md) | 2026-06-06 | `project4-ai-chatbot/backend.tf` (S3 backend) | `terraform destroy` reported `0 destroyed` while the full P4 stack stayed live — remote state was empty after the backend migration never carried state over; stack torn down manually via AWS CLI | Resolved |

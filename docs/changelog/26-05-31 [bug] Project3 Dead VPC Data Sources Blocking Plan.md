@@ -33,7 +33,7 @@ Discovered during Phase 0 validation run using `.\tf-all.ps1 plan`.
 **`project3-smart-vault/main.tf`**
 ```hcl
 # Before (lines 576–586)
-# VPC/서브넷은 계정 기본값 사용
+# Use the account's default VPC/subnet
 data "aws_vpc" "default" {
   default = true
 }

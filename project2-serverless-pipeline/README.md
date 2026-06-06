@@ -114,6 +114,7 @@ aws s3 ls s3://[processed_bucket]/results/ --recursive
 
 ### 5. API Gateway Upload Test
 
+**Windows (PowerShell):**
 ```powershell
 # Use the api_endpoint value from terraform output
 Invoke-RestMethod `
@@ -121,6 +122,19 @@ Invoke-RestMethod `
   -Method POST `
   -ContentType "application/json" `
   -Body '{"filename": "api-test.json", "content": "{\"key\": \"value\"}"}'
+```
+**Linux / macOS:**
+```bash
+# Use the api_endpoint value from terraform output
+curl -X POST "[api_endpoint]" \
+  -H "Content-Type: application/json" \
+  -d '{"filename": "api-test.json", "content": "{\"key\": \"value\"}"}'
+```
+**Windows (curl.exe):**
+```powershell
+curl.exe -X POST "[api_endpoint]" `
+  -H "Content-Type: application/json" `
+  -d '{\"filename\": \"api-test.json\", \"content\": \"{\\\"key\\\": \\\"value\\\"}\"}'
 ```
 
 ### 6. CloudWatch Dashboard

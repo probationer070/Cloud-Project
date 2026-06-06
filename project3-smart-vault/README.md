@@ -43,11 +43,20 @@ CloudWatch alarms (errors, 6h no invocation) → SNS → email
 
 If you don't have an EC2 instance, create a t2.micro Free Tier instance in the AWS Console first.
 
+**Windows (PowerShell):**
 ```powershell
 # Replace with your actual EC2 instance ID
 aws ec2 create-tags `
   --resources i-xxxxxxxxxxxxxxxxx `
   --tags Key=backup,Value=true `
+  --region ap-northeast-2
+```
+**Linux / macOS:**
+```bash
+# Replace with your actual EC2 instance ID
+aws ec2 create-tags \
+  --resources i-xxxxxxxxxxxxxxxxx \
+  --tags Key=backup,Value=true \
   --region ap-northeast-2
 ```
 
@@ -91,6 +100,7 @@ An **"AWS Notification - Subscription Confirmation"** email will arrive at `aler
 
 ### 1. Trigger Backup Lambda Manually
 
+**Windows (PowerShell):**
 ```powershell
 # Run the test_manual_backup output command
 aws lambda invoke `
@@ -100,11 +110,22 @@ aws lambda invoke `
   backup-result.json
 Get-Content backup-result.json
 ```
+**Linux / macOS:**
+```bash
+# Run the test_manual_backup output command
+aws lambda invoke \
+  --function-name p3-smart-vault-backup \
+  --payload '{"schedule":"manual-test"}' \
+  --region ap-northeast-2 \
+  backup-result.json
+cat backup-result.json
+```
 
 Expected: `{"statusCode": 200, "snapshots_created": 1, ...}`
 
 ### 2. Verify Snapshot Created
 
+**Windows (PowerShell):**
 ```powershell
 # Run the check_snapshots output command
 aws ec2 describe-snapshots `
@@ -114,11 +135,22 @@ aws ec2 describe-snapshots `
   --query 'Snapshots[*].{ID:SnapshotId,RetainUntil:Tags[?Key==`RetainUntil`]|[0].Value}' `
   --output table
 ```
+**Linux / macOS:**
+```bash
+# Run the check_snapshots output command
+aws ec2 describe-snapshots \
+  --owner-ids self \
+  --filters Name=tag:ManagedBy,Values=smart-vault \
+  --region ap-northeast-2 \
+  --query 'Snapshots[*].{ID:SnapshotId,RetainUntil:Tags[?Key==`RetainUntil`]|[0].Value}' \
+  --output table
+```
 
 A snapshot with a `RetainUntil` tag confirms the backup ran correctly.
 
 ### 3. Cleanup Lambda Dry Run
 
+**Windows (PowerShell):**
 ```powershell
 # Run the test_manual_cleanup output command
 # With cleanup_dry_run = true, no snapshots are actually deleted
@@ -127,6 +159,16 @@ aws lambda invoke `
   --region ap-northeast-2 `
   cleanup-result.json
 Get-Content cleanup-result.json
+```
+**Linux / macOS:**
+```bash
+# Run the test_manual_cleanup output command
+# With cleanup_dry_run = true, no snapshots are actually deleted
+aws lambda invoke \
+  --function-name p3-smart-vault-cleanup \
+  --region ap-northeast-2 \
+  cleanup-result.json
+cat cleanup-result.json
 ```
 
 ### 4. Verify S3 Archive Log
@@ -149,6 +191,7 @@ Files uploaded to the Seoul archive bucket replicate to Singapore within a few m
 
 Get the snapshot ID from Step 2. The API key is a sensitive value — retrieve it via `terraform output`.
 
+**Windows (PowerShell):**
 ```powershell
 # Retrieve the API key
 $API_KEY = terraform output -raw restore_api_key_value
@@ -160,6 +203,27 @@ Invoke-RestMethod `
   -ContentType "application/json" `
   -Headers @{"x-api-key" = $API_KEY} `
   -Body '{"snapshot_id": "snap-xxxxxxxxxxxxxxxxx", "volume_type": "gp3", "availability_zone": "ap-northeast-2a"}'
+```
+**Linux / macOS:**
+```bash
+# Retrieve the API key
+API_KEY=$(terraform output -raw restore_api_key_value)
+
+# Send restore request (replace snapshot_id with a real value from Step 2)
+curl -X POST "[restore_api_endpoint]" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  -d '{"snapshot_id": "snap-xxxxxxxxxxxxxxxxx", "volume_type": "gp3", "availability_zone": "ap-northeast-2a"}'
+```
+**Windows (curl.exe):**
+```powershell
+# Retrieve the API key
+$API_KEY = terraform output -raw restore_api_key_value
+
+curl.exe -X POST "[restore_api_endpoint]" `
+  -H "Content-Type: application/json" `
+  -H "x-api-key: $API_KEY" `
+  -d '{\"snapshot_id\": \"snap-xxxxxxxxxxxxxxxxx\", \"volume_type\": \"gp3\", \"availability_zone\": \"ap-northeast-2a\"}'
 ```
 
 Expected: `{"statusCode": 200, "volume_id": "vol-...", ...}`

@@ -90,8 +90,14 @@ Open `cloudfront_domain` in a browser → page loads correctly.
 
 ### 2. HTTP → HTTPS Redirect
 
+**Windows (curl.exe):**
 ```powershell
 curl.exe -I http://d1234abcd.cloudfront.net
+# Expected: HTTP/2 301 → Location: https://...
+```
+**Linux / macOS:**
+```bash
+curl -I http://d1234abcd.cloudfront.net
 # Expected: HTTP/2 301 → Location: https://...
 ```
 
@@ -102,9 +108,16 @@ AWS Console → S3 → bucket → select a file → copy "Object URL" → open i
 
 ### 4. CloudFront Cache Invalidation (After File Updates)
 
+**Windows (PowerShell):**
 ```powershell
 aws cloudfront create-invalidation `
   --distribution-id [cloudfront_distribution_id] `
+  --paths "/*"
+```
+**Linux / macOS:**
+```bash
+aws cloudfront create-invalidation \
+  --distribution-id [cloudfront_distribution_id] \
   --paths "/*"
 ```
 

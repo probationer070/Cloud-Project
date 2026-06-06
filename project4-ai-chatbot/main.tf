@@ -76,6 +76,20 @@ data "archive_file" "chatbot" {
   output_path = "${path.module}/.terraform/lambda-chatbot.zip"
 }
 
+# Gemini API 키 — Terraform이 placeholder로 생성, 실제 키는 apply 후 CLI로 1회 주입
+# (SecureString = KMS 암호화 / ignore_changes = 실제 키를 apply가 덮어쓰지 않음)
+resource "aws_ssm_parameter" "gemini" {
+  name        = "/cloud-portfolio/gemini-api-key"
+  description = "Gemini API key for P4 chatbot — real value seeded via CLI after apply"
+  type        = "SecureString"
+  value       = "PLACEHOLDER"
+  tags        = var.common_tags
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 resource "aws_lambda_function" "chatbot" {
   function_name    = "${var.project_name}-chatbot"
   role             = aws_iam_role.chatbot.arn
@@ -92,7 +106,7 @@ resource "aws_lambda_function" "chatbot" {
       # ── AI 제공자 설정 ─────────────────────────────
       # "gemini" 또는 "bedrock" 으로 변경하면 즉시 전환
       AI_PROVIDER           = var.ai_provider
-      GEMINI_API_KEY_PATH   = "/cloud-portfolio/gemini-api-key"
+      GEMINI_API_KEY_PATH   = aws_ssm_parameter.gemini.name
       GEMINI_MODEL          = var.gemini_model
       BEDROCK_MODEL_ID = var.bedrock_model_id
       BEDROCK_REGION   = var.bedrock_region

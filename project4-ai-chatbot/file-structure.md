@@ -52,7 +52,10 @@ project4-ai-chatbot/
 - CloudFront distribution must exist before Terraform can set `ALLOWED_ORIGIN`. The `aws_lambda_function` resource depends on `aws_cloudfront_distribution.ui` implicitly via the env var reference.
 - Lambda timeout (45s) exceeds Gemini HTTP timeout (25s) by 20s — ensures `save_history` always runs even on slow AI responses.
 
-## Bootstrap (one-time, after terraform apply)
+## Seed the API key (one-time, after terraform apply)
+
+`terraform apply` creates the SSM parameter as a `PLACEHOLDER`; seed the real key once
+(`--overwrite` required), then `ignore_changes` keeps it stable across future applies:
 
 ```bash
 aws ssm put-parameter \

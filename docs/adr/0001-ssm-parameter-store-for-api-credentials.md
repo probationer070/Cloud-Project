@@ -19,7 +19,7 @@ Store the Gemini API key in **AWS SSM Parameter Store as a SecureString** (KMS-e
 
 Terraform's role is narrowed to:
 - Provisioning the SSM parameter *resource* with a `"PLACEHOLDER"` value and `lifecycle { ignore_changes = [value] }` so it never overwrites the real key.
-- Passing only the parameter *path* (`/cloud-portfolio/gemini-api-key`) to Lambda as an environment variable (`SSM_GEMINI_KEY_PATH`).
+- Passing only the parameter *path* (`/cloud-portfolio/gemini-api-key`) to Lambda as an environment variable (`GEMINI_API_KEY_PATH`).
 
 The real key is loaded once via a CLI bootstrap command run by the operator after `terraform apply`:
 ```bash

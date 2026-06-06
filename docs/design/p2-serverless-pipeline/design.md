@@ -1,4 +1,4 @@
-# P2 Design — Serverless Pipeline (복합 데이터 처리 파이프라인)
+# P2 Design — Serverless Pipeline (Multi-Format Data Processing Pipeline)
 
 **Directory:** `project2-serverless-pipeline/`
 **Stack:** S3 ×3 + Lambda ×3 + SQS ×2 (+2 DLQ) + DynamoDB + API Gateway (HTTP) + SNS + CloudWatch
@@ -57,5 +57,6 @@ P4 borrows P2's **DynamoDB pattern** for conversation history:
 P2's API-Gateway-to-Lambda (AWS_PROXY) wiring is the same model P4 uses for its
 `POST /chat` endpoint.
 
-> **인프라 독립성:** P4는 P2의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
-> 자체 DynamoDB 테이블과 API Gateway를 직접 생성합니다. P2를 배포하지 않아도 P4는 정상 작동합니다.
+> **Infrastructure independence:** P4 does not reference P2's deployed resources. In P4's
+> `main.tf` it creates its own DynamoDB table and API Gateway directly. P4 works correctly
+> even if P2 is never deployed.

@@ -15,7 +15,7 @@ variable "project_name" {
 variable "suffix" {
   description = "S3 버킷 이름 고유화"
   type        = string
-  default     = "jaehwan-20260528" # ← 반드시 변경
+  default     = "jaehwan-20260606" # ← 반드시 변경
 }
 
 variable "alert_email" {
@@ -43,7 +43,8 @@ variable "ai_provider" {
 variable "gemini_model" {
   description = "사용할 Gemini 모델"
   type        = string
-  default     = "gemma-4-26b-a4b-it"
+  default     = "gemini-3.1-flash-lite"
+  // default     = "gemma-4-26b-a4b-it"
 }
 
 # Bedrock 설정

@@ -1,4 +1,4 @@
-# P3 Design — Smart Vault (지능형 자동 백업)
+# P3 Design — Smart Vault (Intelligent Automated Backup)
 
 **Directory:** `project3-smart-vault/`
 **Stack:** EventBridge + Lambda ×3 + EC2/EBS snapshots + S3 ×2 (cross-region) + API Gateway (REST) + SNS + CloudWatch
@@ -41,76 +41,76 @@ P4 borrows P3's **SNS email-notification pattern** for agent handoff: when the
 chatbot detects an escalation request, it publishes to an SNS topic that emails
 a human agent — the same topic/subscription wiring P3 uses for backup reports.
 
-> **인프라 독립성:** P4는 P3의 배포된 리소스를 참조하지 않습니다. P4 `main.tf`에서
-> 자체 SNS 토픽을 직접 생성합니다. P3을 배포하지 않아도 P4는 정상 작동합니다.
+> **Infrastructure independence:** P4 does not reference P3's deployed resources. In P4's
+> `main.tf` it creates its own SNS topic directly. P4 works correctly even if P3 is never deployed.
 
 ---
 
 > The sections below were the original root `README.md` for P3, preserved here.
 
-## 아키텍처
+## Architecture
 ```
-[EventBridge 스케줄러]
-  매시간  ──────────────────────────────────┐
-  매일 자정 ─────────────────────────────┐  │
-  매일 새벽 2시 (KST) ────────┐          │  │
-                               │          │  │
-                        Cleanup Lambda  Backup Lambda
-                        만료 스냅샷 삭제   ↓
-                               │     EC2 (backup:true 태그)
-                               │          ↓
-                               │     EBS 스냅샷 생성 (증분)
-                               │          ↓
-                               │     태그 자동 부여
-                               │    (날짜/환경/RetainUntil)
-                               ↓
-                        S3 아카이브 버킷 ──→ S3 DR 버킷 (크로스 리전)
-                               ↓
-                           SNS 알림 → 이메일
+[EventBridge scheduler]
+  Hourly          ───────────────────────────┐
+  Daily midnight  ────────────────────────┐  │
+  Daily 02:00 (KST) ──────────┐           │  │
+                              │           │  │
+                       Cleanup Lambda   Backup Lambda
+                  Delete expired snapshots   ↓
+                              │      EC2 (backup:true tag)
+                              │           ↓
+                              │      Create EBS snapshot (incremental)
+                              │           ↓
+                              │      Auto-attach tags
+                              │     (date / environment / RetainUntil)
+                              ↓
+                    S3 archive bucket ──→ S3 DR bucket (cross-region)
+                              ↓
+                       SNS notification → email
 
 [API Gateway]
-  POST /restore ──→ Restore Lambda ──→ 새 EBS 볼륨 생성
+  POST /restore ──→ Restore Lambda ──→ Create new EBS volume
 ```
 
-## 구성 파일
+## File Layout
 ```
 project3-smart-vault/
-├── main.tf               # 전체 인프라
-├── iam.tf                # Lambda별 최소 권한
+├── main.tf               # full infrastructure
+├── iam.tf                # least privilege per Lambda
 ├── variables.tf
-├── outputs.tf            # 테스트 명령어 포함
+├── outputs.tf            # includes test commands
 └── lambda/
-    ├── backup/index.py   # backup:true 태그 인스턴스 → 스냅샷 생성
-    ├── cleanup/index.py  # RetainUntil 기준 만료 스냅샷 삭제
-    └── restore/index.py  # 스냅샷 → 새 EBS 볼륨 복구
+    ├── backup/index.py   # backup:true tagged instances → create snapshots
+    ├── cleanup/index.py  # delete expired snapshots by RetainUntil
+    └── restore/index.py  # snapshot → restore new EBS volume
 ```
 
-## 예상 비용
-| 서비스 | 무료 범위 | 초과 비용 |
+## Estimated Cost
+| Service | Free tier | Cost over limit |
 |--------|-----------|----------|
-| Lambda | 100만 건/월 | 없음 |
-| EventBridge | 무제한 스케줄 | 없음 |
-| S3 아카이브 | 5GB | 없음 |
-| EBS 스냅샷 | 없음 (GB당 과금) | **$0.05/GB/월** |
-| 크로스 리전 복제 | 없음 | **$0.02/GB** |
-| SNS | 1,000건 무료 | 없음 |
+| Lambda | 1M requests/mo | none |
+| EventBridge | unlimited schedules | none |
+| S3 archive | 5 GB | none |
+| EBS snapshots | none (billed per GB) | **$0.05/GB/mo** |
+| Cross-region replication | none | **$0.02/GB** |
+| SNS | 1,000 free | none |
 
-> ⚠️ **EBS 스냅샷이 유일한 유료 항목** — 테스트용 소규모 볼륨 기준 $1 미만.
-> 테스트 후 반드시 `terraform destroy` 실행.
+> ⚠️ **EBS snapshots are the only paid item** — under $1 for a small test volume.
+> Always run `terraform destroy` after testing.
 
 ---
 
-## 배포 순서
+## Deployment Steps
 
-### 1. variables.tf 수정
+### 1. Edit variables.tf
 ```hcl
-suffix          = "홍길동-20250527"
+suffix          = "yourname-20250527"
 alert_email     = "your@email.com"
-cleanup_dry_run = true   # 처음엔 true로 안전하게 테스트
+cleanup_dry_run = true   # keep true for a safe first test
 retention_days  = 7
 ```
 
-### 2. 배포
+### 2. Deploy
 ```bash
 terraform init
 terraform plan
@@ -119,21 +119,21 @@ terraform apply
 
 ---
 
-## 테스트 순서
+## Test Order
 
-### Step 1. EC2 인스턴스에 backup 태그 추가
+### Step 1. Add the backup tag to an EC2 instance
 ```bash
-# 본인 EC2 인스턴스 ID로 교체
+# Replace with your own EC2 instance ID
 aws ec2 create-tags \
   --resources i-xxxxxxxxxxxxxxxxx \
   --tags Key=backup,Value=true \
   --region ap-northeast-2
 ```
-> EC2 인스턴스가 없다면: AWS 콘솔 → EC2 → 인스턴스 시작 (t2.micro / Free Tier)
+> If you have no EC2 instance: AWS Console → EC2 → Launch instance (t2.micro / Free Tier)
 
-### Step 2. 백업 Lambda 수동 실행
+### Step 2. Run the Backup Lambda manually
 ```bash
-# outputs의 test_manual_backup 명령어 실행
+# Run the test_manual_backup command from outputs
 aws lambda invoke \
   --function-name p3-smart-vault-backup \
   --payload '{"schedule":"manual-test"}' \
@@ -141,9 +141,9 @@ aws lambda invoke \
   /tmp/backup-result.json && cat /tmp/backup-result.json
 ```
 
-### Step 3. 스냅샷 생성 확인
+### Step 3. Verify snapshot creation
 ```bash
-# outputs의 check_snapshots 명령어 실행
+# Run the check_snapshots command from outputs
 aws ec2 describe-snapshots \
   --owner-ids self \
   --filters Name=tag:ManagedBy,Values=smart-vault \
@@ -152,18 +152,18 @@ aws ec2 describe-snapshots \
   --output table
 ```
 
-### Step 4. 정리 Lambda 테스트 (DRY RUN)
+### Step 4. Test the Cleanup Lambda (DRY RUN)
 ```bash
-# cleanup_dry_run = true 상태에서 실행 — 실제 삭제 없이 대상만 출력
+# Runs with cleanup_dry_run = true — lists targets only, no actual deletion
 aws lambda invoke \
   --function-name p3-smart-vault-cleanup \
   --region ap-northeast-2 \
   /tmp/cleanup-result.json && cat /tmp/cleanup-result.json
 ```
 
-### Step 5. 복구 API 테스트
+### Step 5. Test the Restore API
 ```bash
-# Step 3에서 확인한 snapshot_id로 교체
+# Replace with the snapshot_id confirmed in Step 3
 curl -X POST [restore_api_endpoint] \
   -H "Content-Type: application/json" \
   -d '{
@@ -173,34 +173,34 @@ curl -X POST [restore_api_endpoint] \
   }'
 ```
 
-### Step 6. DR 복제 확인
+### Step 6. Verify DR replication
 ```bash
-# 서울 → 싱가포르 복제 확인
+# Verify Seoul → Singapore replication
 aws s3 ls s3://[dr-archive-bucket]/ --recursive --region ap-southeast-1
 ```
 
 ---
 
-## 검증 체크리스트
-- [ ] backup:true 태그 EC2에 스냅샷 자동 생성 확인
-- [ ] 스냅샷에 RetainUntil / BackupDate 등 태그 부여 확인
-- [ ] Cleanup Lambda DRY RUN 결과 확인
-- [ ] 복구 API로 새 EBS 볼륨 생성 확인
-- [ ] S3 아카이브에 cleanup 로그 저장 확인
-- [ ] DR 버킷에 크로스 리전 복제 확인
-- [ ] 이메일로 백업 완료 리포트 수신 확인
-- [ ] CloudWatch 대시보드 Lambda 호출 그래프 확인
+## Validation Checklist
+- [ ] Snapshot auto-created for backup:true tagged EC2
+- [ ] Snapshot has RetainUntil / BackupDate tags
+- [ ] Cleanup Lambda DRY RUN output verified
+- [ ] Restore API creates a new EBS volume
+- [ ] Cleanup log stored in S3 archive
+- [ ] Cross-region replication to DR bucket confirmed
+- [ ] Backup completion report received by email
+- [ ] CloudWatch dashboard Lambda invocation graph confirmed
 
 ---
 
-## 리소스 삭제
+## Destroy Resources
 ```bash
-# S3 버킷 2개 비우기
+# Empty both S3 buckets
 aws s3 rm s3://[archive-bucket] --recursive
 aws s3 rm s3://[dr-archive-bucket] --recursive --region ap-southeast-1
 
 terraform destroy
 ```
 
-> ⚠️ EBS 스냅샷은 Terraform이 직접 관리하지 않으므로 콘솔에서 수동 삭제 필요:
-> EC2 → Snapshots → ManagedBy=smart-vault 필터 → 전체 선택 → 삭제
+> ⚠️ EBS snapshots are not managed by Terraform — delete them manually in the console:
+> EC2 → Snapshots → filter ManagedBy=smart-vault → select all → Delete
