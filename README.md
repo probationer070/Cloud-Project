@@ -5,6 +5,8 @@ Four AWS projects provisioned with Terraform.
 **Each project is fully independent** — none depends on another's deployed infrastructure, and each can be deployed or destroyed on its own, in any order.
 **P4 (AI Chatbot)** reuses the Terraform patterns (code structure) of P1–P3, but provisions every resource it needs (S3, CloudFront, DynamoDB, SNS, etc.) on its own. **You do NOT need to deploy P1, P2, or P3 to test P4.**
 
+**Shared Terraform state:** the [`bootstrap/`](bootstrap/README.md) config creates one S3 bucket for remote state — apply it once. **P4 uses it** via `backend.tf` (S3 + native lockfile locking); P1–P3 currently still use local state. The bucket is the only cross-project prerequisite; the projects still share no application infrastructure. See [ADR-0002](docs/adr/0002-s3-remote-state-backend.md).
+
 > **Development environment setup** → [`CONTRIBUTING.md`](CONTRIBUTING.md) — local init (`init-all.ps1` / `init-all.sh`), AWS credentials, CI workflow
 
 ---
@@ -72,7 +74,7 @@ File upload (S3 ObjectCreated  or  POST /upload)
 **Goal:** A fully automated backup system that snapshots, manages retention for, and restores the EBS volumes of EC2 instances tagged `backup:true`. Includes Singapore DR replication.
 
 ```
-EventBridge (hourly / daily midnight) → Backup Lambda
+EventBridge (hourly / daily 09:01 KST) → Backup Lambda
     → Find EC2 instances tagged backup:true
     → Create EBS snapshot + attach RetainUntil tag
     → SNS report email
@@ -109,7 +111,7 @@ CloudWatch alarms → SNS → email
 
 ## P4 — Customer-Service AI Chatbot ★ Flagship
 
-**Goal:** A Gemini-API-based customer-service chatbot. API Gateway + Lambda 5-step processing, DynamoDB conversation history (24h TTL), SNS notification on agent escalation. Reuses P1/P2/P3 patterns.
+**Goal:** A customer-service chatbot with a pluggable AI provider (Google Gemini API by default, Amazon Bedrock / Claude optional — switch via the `AI_PROVIDER` env var). API Gateway + Lambda 5-step processing, DynamoDB conversation history (24h TTL), SNS notification on agent escalation. Reuses P1/P2/P3 patterns.
 
 ```
 Browser / curl
@@ -117,7 +119,7 @@ Browser / curl
     → Lambda chatbot
          ├─ 1. Fetch DynamoDB conversation history (last 10 turns)
          ├─ 2. Build prompt (System Prompt + history + current message)
-         ├─ 3. Call Gemini API (key fetched once from SSM Parameter Store at cold start)
+         ├─ 3. Call AI provider (Gemini by default / Bedrock optional; Gemini key fetched once from SSM at cold start)
          ├─ 4. Validate/route response (normal · escalation · profanity · fallback)
          └─ 5. Save DynamoDB conversation history (TTL 24h)
               ↓ (on escalation detected)
@@ -132,8 +134,8 @@ CloudWatch alarms (errors · response latency over 10s) → SNS → email
 | API Gateway (HTTP v2) | `POST /chat` REST endpoint | On user message submission |
 | Lambda chatbot | 5-step chatbot core logic | On API Gateway invocation (timeout 45s, ARM64) |
 | DynamoDB `p4-chatbot-sessions` | Stores per-session conversation history (auto-expires at TTL 24h) | Read/written on every Lambda invocation |
-| SSM Parameter Store | Holds the Gemini API key (SecureString, KMS-encrypted) | Fetched once at Lambda cold start, then cached for the container lifetime |
-| Gemini API (external) | Generates AI responses (HTTP timeout 25s) | On every Lambda invocation |
+| SSM Parameter Store | Holds the Gemini API key (SecureString, KMS-encrypted). Terraform creates it as a `PLACEHOLDER`; the real key is seeded once via CLI after apply (`ignore_changes` keeps apply from overwriting it) | Fetched once at Lambda cold start, then cached for the container lifetime |
+| Gemini API / Amazon Bedrock (external) | Generates AI responses — Gemini (HTTP timeout 25s) or Bedrock/Claude via `bedrock-runtime`, selected by `AI_PROVIDER` | On every Lambda invocation |
 | SNS | Email notification for agent-handoff requests | When ESCALATE is detected in the response |
 | S3 | Hosts web UI static files (private, OAC) | On CloudFront requests |
 | CloudFront | Serves web UI over HTTPS, CORS origin source | On browser access |
@@ -144,7 +146,7 @@ CloudWatch alarms (errors · response latency over 10s) → SNS → email
 - **P2 →** DynamoDB `PAY_PER_REQUEST` + TTL auto-expiry pattern (P4 creates its own DynamoDB table)
 - **P3 →** SNS email-notification pattern (P4 creates its own SNS topic)
 
-📄 [Design doc](docs/design/p4-ai-chatbot/design.md) · [File structure](project4-ai-chatbot/file-structure.md) · [P4 build plan](docs/todo.md) · [ADR: SSM credentials](docs/adr/0001-ssm-parameter-store-for-api-credentials.md)
+📄 [Design doc](docs/design/p4-ai-chatbot/design.md) · [File structure](project4-ai-chatbot/file-structure.md) · [P4 build plan](docs/todo.md) · [ADR: SSM credentials](docs/adr/0001-ssm-parameter-store-for-api-credentials.md) · [ADR: S3 remote state](docs/adr/0002-s3-remote-state-backend.md)
 
 ---
 
@@ -152,10 +154,11 @@ CloudWatch alarms (errors · response latency over 10s) → SNS → email
 
 ```
 Cloud Project/
+├── bootstrap/                    # one-time: creates the shared S3 state bucket used by P4 (ADR-0002)
 ├── project1-static-web/          # P1 infra + website
 ├── project2-serverless-pipeline/ # P2 infra + Lambda
 ├── project3-smart-vault/         # P3 infra + Lambda
-├── project4-ai-chatbot/          # P4 infra + Lambda + web UI
+├── project4-ai-chatbot/          # P4 infra + Lambda + web UI (backend.tf → S3 remote state)
 ├── docs/
 │   ├── design/                   # P1/P2/P3 design docs
 │   ├── adr/                      # Architecture Decision Records
@@ -164,6 +167,9 @@ Cloud Project/
 │   ├── error/                    # bug records
 │   └── refactoring-*.md          # refactoring reference docs
 ├── .agents/                      # sub-agent specs (refactoring · idea-management · security)
+├── init-all.ps1 / init-all.sh    # terraform init across all projects
+├── tf-all.ps1                    # run init/plan/apply/destroy across all projects
+├── CONTRIBUTING.md               # dev environment setup
 └── 정리자료/                     # blog notes, hand-written (do not modify)
 ```
 
@@ -174,16 +180,32 @@ Cloud Project/
 3. Every code change → must be recorded in `docs/changelog/`
 4. Every confirmed bug → must be recorded in `docs/error/`
 
-## Deployment (common)
+## Deployment
 
-From each project directory:
+**One-time — create the shared state bucket** (needed for P4's remote backend):
 
 ```bash
+cd bootstrap
 terraform init
+terraform apply        # creates the S3 state bucket; bootstrap keeps its own local state
+```
+
+**Per project** — from each project directory:
+
+```bash
+terraform init         # P4 configures the S3 backend; P1–P3 use local state
 terraform plan
 terraform apply
 # after testing
 terraform destroy
 ```
+
+> **P4 only:** after `apply`, seed the real Gemini API key into SSM once — Terraform
+> creates the parameter as a `PLACEHOLDER` (see [ADR-0001](docs/adr/0001-ssm-parameter-store-for-api-credentials.md)):
+> ```bash
+> aws ssm put-parameter --name /cloud-portfolio/gemini-api-key --type SecureString --overwrite --value "YOUR_KEY"
+> ```
+
+**Across all projects at once** (Windows): `./tf-all.ps1 <init|plan|apply|destroy> [project]` — runs against every `project*` directory, with a confirmation gate for `apply`/`destroy`. `init-all.ps1` / `init-all.sh` run just `init`.
 
 For detailed deployment and testing steps, see each project directory's `README.md` and `file-structure.md`.

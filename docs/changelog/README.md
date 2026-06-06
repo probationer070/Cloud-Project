@@ -29,3 +29,4 @@ Use `docs/changelog/template.md` to create new entries.
 | 26-06-06 | upgrade | [Portfolio Technical Deep-Dive Document](26-06-06%20[upgrade]%20Portfolio%20Technical%20Deep-Dive%20Document.md) | `[project] portfolio only.md` (new) |
 | 26-06-06 | bug | [P4 Full Teardown And Empty State Noop](26-06-06%20[bug]%20P4%20Full%20Teardown%20And%20Empty%20State%20Noop.md) | none (infra teardown — 11 P4 resource groups deleted via AWS CLI); see ERR-002 |
 | 26-06-06 | upgrade | [P4 SSM Parameter Managed by Terraform](26-06-06%20[upgrade]%20P4%20SSM%20Parameter%20Managed%20by%20Terraform.md) | `project4-ai-chatbot/main.tf`, `README.md`, `file-structure.md`, `docs/adr/0001*`, `docs/design/p4*`, `[project] portfolio only.md` |
+| 26-06-07 | upgrade | [Root README Synced With Current Code](26-06-07%20[upgrade]%20Root%20README%20Synced%20With%20Current%20Code.md) | `README.md` |
