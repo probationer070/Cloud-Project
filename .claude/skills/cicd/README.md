@@ -17,9 +17,12 @@
 
 ### Part 2 — GitHub Actions
 
-- New project directory included in `.github/workflows/terraform-init.yml` matrix
-- No hardcoded AWS credentials — uses `${{ secrets.AWS_ACCESS_KEY_ID }}`
+- New project directory included in `.github/workflows/terraform-ci.yml` (`fmt-check` loop covers `project*/`)
+- Authentication uses OIDC (`${{ secrets.AWS_ROLE_ARN }}`) — no hardcoded or long-lived credentials
 - Workflow path references the correct project directory
+- Terraform version pinned (`terraform_version: 1.12.2`) — update here when upgrading
+- Cache keyed on `**/.terraform.lock.hcl` — if adding a new project, ensure it has a `.terraform.lock.hcl` after first `terraform init`
+- `concurrency` block present — stale runs on the same branch are cancelled automatically
 
 ## Output tags
 
@@ -40,14 +43,14 @@
 
 ### Findings
 [MISSING] project5-document-engine/outputs.tf — query API endpoint URL not exported
-[WARN]    .github/workflows/terraform-init.yml:12 — project5 not in directory matrix
+[WARN]    .github/workflows/terraform-ci.yml — project5 fmt-check loop uses project*/ glob; verify it picks up the new directory name
 [OK]      project5-document-engine/backend.tf — remote state backend correctly keyed
 
 ### Summary
 1 MISSING and 1 WARN to address before deploy.
 
 ### Next step
-Add query_api_endpoint to outputs.tf, then add project5-document-engine to workflow matrix.
+Add query_api_endpoint to outputs.tf, then verify project5-document-engine is picked up by the project*/ glob in terraform-ci.yml.
 ```
 
 ## Tips
@@ -55,3 +58,5 @@ Add query_api_endpoint to outputs.tf, then add project5-document-engine to workf
 - Always run `/cicd` before the first `terraform apply` on a new project — a missing `backend.tf` will cause state to be created locally and is hard to migrate later (see ERR-001).
 - `[MISSING]` on `outputs.tf` means the next session won't know the endpoint URL without going to the AWS console.
 - Hardcoded credentials in workflow YAML are a `[BLOCK]`-level security issue — treat them as such even though `/cicd` uses `[WARN]`.
+- The project uses OIDC (`AWS_ROLE_ARN` secret) — if you see `AWS_ACCESS_KEY_ID` anywhere in a workflow file, flag it as `[BLOCK]`.
+- New projects are picked up automatically by the `project*/` glob in `terraform-ci.yml` — no manual matrix update needed.
