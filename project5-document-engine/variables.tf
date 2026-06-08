@@ -15,12 +15,12 @@ variable "project_name" {
 variable "suffix" {
   description = "S3 버킷 이름 고유화"
   type        = string
-  default     = "yourname-20250527" # ← 반드시 변경
+  default     = "jaehwan-20250608" # ← 반드시 변경
 }
 
 variable "alert_email" {
   type    = string
-  default = "your@email.com" # ← 반드시 변경
+  default = "qkrwoghks0717@gmail.com" # ← 반드시 변경
 }
 
 # ── OpenSearch 설정 ───────────────────────────────────
