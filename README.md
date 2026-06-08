@@ -1,3 +1,5 @@
+![Terraform CI](https://github.com/probationer070/Cloud-Project/actions/workflows/terraform-ci.yml/badge.svg?branch=main)
+
 # Cloud Project — AWS Hands-On Portfolio (P1–P4)
 
 Four AWS projects provisioned with Terraform.
