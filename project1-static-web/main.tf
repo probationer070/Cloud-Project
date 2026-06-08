@@ -153,7 +153,7 @@ resource "aws_wafv2_web_acl" "website" {
 
     statement {
       managed_rule_group_statement {
-        
+
         name        = "AWSManagedRulesAmazonIpReputationList" # <- 기존 ManagedRuleSet에서 올바른 이름으로 수정
         vendor_name = "AWS"
       }

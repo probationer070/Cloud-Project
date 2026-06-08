@@ -123,7 +123,7 @@ resource "aws_sqs_queue" "structured_dlq" {
 
 resource "aws_sqs_queue" "structured" {
   name                       = "${var.project_name}-structured-queue"
-  visibility_timeout_seconds = 300 # Lambda 타임아웃과 동일
+  visibility_timeout_seconds = 300   # Lambda 타임아웃과 동일
   message_retention_seconds  = 86400 # 1일
   tags                       = var.common_tags
 
@@ -429,8 +429,8 @@ resource "aws_cloudwatch_dashboard" "pipeline" {
       {
         type = "metric", x = 0, y = 0, width = 8, height = 6
         properties = {
-          title   = "Lambda 호출 수"
-          region  = var.aws_region
+          title  = "Lambda 호출 수"
+          region = var.aws_region
           metrics = [
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.router.function_name],
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.parser.function_name],
@@ -442,8 +442,8 @@ resource "aws_cloudwatch_dashboard" "pipeline" {
       {
         type = "metric", x = 8, y = 0, width = 8, height = 6
         properties = {
-          title   = "Lambda 에러 수"
-          region  = var.aws_region
+          title  = "Lambda 에러 수"
+          region = var.aws_region
           metrics = [
             ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.router.function_name],
             ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.parser.function_name],
@@ -455,8 +455,8 @@ resource "aws_cloudwatch_dashboard" "pipeline" {
       {
         type = "metric", x = 16, y = 0, width = 8, height = 6
         properties = {
-          title   = "SQS 큐 메시지 수"
-          region  = var.aws_region
+          title  = "SQS 큐 메시지 수"
+          region = var.aws_region
           metrics = [
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.structured.name],
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.unstructured.name],
@@ -467,8 +467,8 @@ resource "aws_cloudwatch_dashboard" "pipeline" {
       {
         type = "metric", x = 0, y = 6, width = 12, height = 6
         properties = {
-          title   = "Lambda 실행 시간 (ms)"
-          region  = var.aws_region
+          title  = "Lambda 실행 시간 (ms)"
+          region = var.aws_region
           metrics = [
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.parser.function_name],
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.extractor.function_name],
@@ -479,8 +479,8 @@ resource "aws_cloudwatch_dashboard" "pipeline" {
       {
         type = "metric", x = 12, y = 6, width = 12, height = 6
         properties = {
-          title   = "DLQ 적재 현황 (처리 실패)"
-          region  = var.aws_region
+          title  = "DLQ 적재 현황 (처리 실패)"
+          region = var.aws_region
           metrics = [
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.structured_dlq.name],
             ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", aws_sqs_queue.unstructured_dlq.name],

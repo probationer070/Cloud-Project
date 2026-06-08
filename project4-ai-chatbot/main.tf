@@ -105,11 +105,11 @@ resource "aws_lambda_function" "chatbot" {
     variables = {
       # ── AI 제공자 설정 ─────────────────────────────
       # "gemini" 또는 "bedrock" 으로 변경하면 즉시 전환
-      AI_PROVIDER           = var.ai_provider
-      GEMINI_API_KEY_PATH   = aws_ssm_parameter.gemini.name
-      GEMINI_MODEL          = var.gemini_model
-      BEDROCK_MODEL_ID = var.bedrock_model_id
-      BEDROCK_REGION   = var.bedrock_region
+      AI_PROVIDER         = var.ai_provider
+      GEMINI_API_KEY_PATH = aws_ssm_parameter.gemini.name
+      GEMINI_MODEL        = var.gemini_model
+      BEDROCK_MODEL_ID    = var.bedrock_model_id
+      BEDROCK_REGION      = var.bedrock_region
 
       # ── 챗봇 설정 ──────────────────────────────────
       DYNAMODB_TABLE    = aws_dynamodb_table.sessions.name
@@ -141,7 +141,7 @@ resource "aws_apigatewayv2_api" "chatbot" {
 
   # CORS 설정 (웹 UI에서 직접 호출 허용)
   cors_configuration {
-    allow_origins = ["*"]  # 실제 서비스 시 특정 도메인으로 제한
+    allow_origins = ["*"] # 실제 서비스 시 특정 도메인으로 제한
     allow_methods = ["POST", "OPTIONS"]
     allow_headers = ["Content-Type"]
     max_age       = 300
@@ -259,7 +259,7 @@ resource "aws_cloudfront_distribution" "ui" {
     }
 
     min_ttl     = 0
-    default_ttl = 300   # 5분 캐시 (챗봇 UI는 자주 업데이트될 수 있음)
+    default_ttl = 300 # 5분 캐시 (챗봇 UI는 자주 업데이트될 수 있음)
     max_ttl     = 3600
   }
 
@@ -285,8 +285,8 @@ resource "aws_s3_bucket_policy" "ui" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Sid    = "AllowCloudFront"
-      Effect = "Allow"
+      Sid       = "AllowCloudFront"
+      Effect    = "Allow"
       Principal = { Service = "cloudfront.amazonaws.com" }
       Action    = "s3:GetObject"
       Resource  = "${aws_s3_bucket.ui.arn}/*"

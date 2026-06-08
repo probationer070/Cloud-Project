@@ -85,13 +85,13 @@ resource "aws_opensearch_domain" "engine" {
 
   # 최소 사양 (비용 최소화)
   cluster_config {
-    instance_type  = "t3.small.search"  # 가장 저렴한 옵션
-    instance_count = 1                  # 단일 노드 (테스트용)
+    instance_type  = "t3.small.search" # 가장 저렴한 옵션
+    instance_count = 1                 # 단일 노드 (테스트용)
   }
 
   ebs_options {
     ebs_enabled = true
-    volume_size = 10  # 10GB (최소)
+    volume_size = 10 # 10GB (최소)
     volume_type = "gp3"
   }
 
@@ -110,7 +110,7 @@ resource "aws_opensearch_domain" "engine" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect    = "Allow"
+        Effect = "Allow"
         Principal = {
           AWS = [
             aws_iam_role.ingest.arn,
@@ -177,7 +177,7 @@ resource "aws_lambda_function" "ingest" {
   runtime          = "python3.12"
   filename         = data.archive_file.ingest.output_path
   source_code_hash = data.archive_file.ingest.output_base64sha256
-  timeout          = 300  # Textract + 임베딩 생성이 오래 걸림
+  timeout          = 300 # Textract + 임베딩 생성이 오래 걸림
   memory_size      = 512
 
   environment {
@@ -209,7 +209,7 @@ resource "aws_s3_bucket_notification" "documents" {
     lambda_function_arn = aws_lambda_function.ingest.arn
     events              = ["s3:ObjectCreated:*"]
     # PDF와 이미지만 트리거
-    filter_suffix       = ".pdf"
+    filter_suffix = ".pdf"
   }
 
   depends_on = [aws_lambda_permission.s3_invoke_ingest]
@@ -342,8 +342,8 @@ resource "aws_cloudwatch_dashboard" "engine" {
       {
         type = "metric", x = 0, y = 0, width = 8, height = 6
         properties = {
-          title   = "Lambda 호출 (Ingest / Query)"
-          region  = var.aws_region
+          title  = "Lambda 호출 (Ingest / Query)"
+          region = var.aws_region
           metrics = [
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.ingest.function_name],
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.query.function_name],
@@ -354,8 +354,8 @@ resource "aws_cloudwatch_dashboard" "engine" {
       {
         type = "metric", x = 8, y = 0, width = 8, height = 6
         properties = {
-          title   = "Lambda 처리 시간 (ms)"
-          region  = var.aws_region
+          title  = "Lambda 처리 시간 (ms)"
+          region = var.aws_region
           metrics = [
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.ingest.function_name],
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.query.function_name],
@@ -366,8 +366,8 @@ resource "aws_cloudwatch_dashboard" "engine" {
       {
         type = "metric", x = 16, y = 0, width = 8, height = 6
         properties = {
-          title   = "OpenSearch 검색 지연 시간"
-          region  = var.aws_region
+          title  = "OpenSearch 검색 지연 시간"
+          region = var.aws_region
           metrics = [
             ["AWS/ES", "SearchLatency", "DomainName", aws_opensearch_domain.engine.domain_name, "ClientId", data.aws_caller_identity.current.account_id]
           ]

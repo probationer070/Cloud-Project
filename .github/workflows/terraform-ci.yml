@@ -1,0 +1,103 @@
+name: Terraform CI
+
+on:
+  push:
+    branches: [main, Testo]
+  pull_request:
+
+concurrency:
+  group: terraform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  fmt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+
+      - name: Check formatting
+        run: |
+          for dir in project*/; do
+            echo "=== fmt check: $dir ==="
+            terraform -chdir="$dir" fmt -check -recursive
+          done
+
+  validate:
+    needs: fmt-check
+    runs-on: ubuntu-latest
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Create plugin cache dir and configure Terraform
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          cat > ~/.terraformrc <<EOF
+          plugin_cache_dir = "$TF_PLUGIN_CACHE_DIR"
+          EOF
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-
+
+      - name: Init and validate all projects
+        run: TF_INIT_FLAGS="-backend=false" bash init-all.sh validate
+
+  plan:
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.2
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Create plugin cache dir and configure Terraform
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          cat > ~/.terraformrc <<EOF
+          plugin_cache_dir = "$TF_PLUGIN_CACHE_DIR"
+          EOF
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-
+
+      - name: Plan all projects
+        run: TF_INIT_FLAGS="-backend=false" bash init-all.sh plan
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terraform-plan
+          path: "**/plan.txt"

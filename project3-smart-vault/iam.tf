@@ -48,8 +48,8 @@ resource "aws_iam_role_policy" "backup" {
       local.log_policy,
       {
         # EC2: 인스턴스 조회 + 스냅샷 생성
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ec2:DescribeInstances",
           "ec2:DescribeVolumes",
           "ec2:CreateSnapshot",
@@ -88,8 +88,8 @@ resource "aws_iam_role_policy" "cleanup" {
       local.log_policy,
       {
         # EC2: 스냅샷 조회 + 삭제
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ec2:DescribeSnapshots",
           "ec2:DeleteSnapshot",
         ]
@@ -131,8 +131,8 @@ resource "aws_iam_role_policy" "restore" {
       local.log_policy,
       {
         # EC2: 스냅샷 조회 + 볼륨 생성
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "ec2:DescribeSnapshots",
           "ec2:CreateVolume",
           "ec2:CreateTags",

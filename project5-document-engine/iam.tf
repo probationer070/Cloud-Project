@@ -20,8 +20,8 @@ locals {
     Resource = "arn:aws:logs:*:*:*"
   }
   bedrock_policy = {
-    Effect   = "Allow"
-    Action   = ["bedrock:InvokeModel"]
+    Effect = "Allow"
+    Action = ["bedrock:InvokeModel"]
     Resource = [
       "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
       "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku*",
