@@ -94,7 +94,7 @@ jobs:
           restore-keys: terraform-
 
       - name: Plan all projects
-        run: TF_INIT_FLAGS="-backend=false" bash init-all.sh plan
+        run: bash init-all.sh plan
 
       - uses: actions/upload-artifact@v4
         if: always()

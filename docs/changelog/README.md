@@ -32,3 +32,4 @@ Use `docs/changelog/template.md` to create new entries.
 | 26-06-07 | upgrade | [Root README Synced With Current Code](26-06-07%20[upgrade]%20Root%20README%20Synced%20With%20Current%20Code.md) | `README.md` |
 | 26-06-08 | upgrade | [GitHub Actions CI Pipeline with OIDC](26-06-08%20[upgrade]%20GitHub%20Actions%20CI%20Pipeline%20with%20OIDC.md) | `terraform-ci.yml`, `init-all.sh`, `README.md` |
 | 26-06-08 | bug | [TF Plugin Cache Dir Fmt Check Failure](26-06-08%20[bug]%20TF%20Plugin%20Cache%20Dir%20Fmt%20Check%20Failure.md) | `terraform-ci.yml` |
+| 26-06-08 | bug | [GitHub Actions OIDC Role and Plan Backend Fix](26-06-08%20[bug]%20GitHub%20Actions%20OIDC%20Role%20and%20Plan%20Backend%20Fix.md) | `bootstrap/main.tf`, `bootstrap/outputs.tf`, `.github/workflows/terraform-ci.yml` |
