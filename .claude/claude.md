@@ -77,16 +77,18 @@ architecture is documented under `docs/design/`.
 
 **Decision matrix — which agents to consult:**
 
-| Change Type | Agents to Consult |
-|-------------|-------------------|
-| Terraform resource add/change | `security` |
-| IAM role or policy change | `security` |
-| New Lambda env var or external input | `security` |
-| Planned rewrite or 3+ duplicate patterns | `refactoring` |
-| Function > 40 lines or 4+ nesting levels | `refactoring` |
-| New feature, plan, or design decision | `idea-management` |
-| `docs/todo.md` or design doc out of sync | `idea-management` |
-| Pre-deploy review | `security`, `refactoring` |
+| Change Type | Agents to Consult | Skills to Run |
+|-------------|-------------------|---------------|
+| Terraform resource add/change | `security` | `/security` `/cicd` |
+| IAM role or policy change | `security` | `/security` |
+| New Lambda env var or external input | `security` | `/security` |
+| Planned rewrite or 3+ duplicate patterns | `refactoring` | `/refactoring` |
+| Function > 40 lines or 4+ nesting levels | `refactoring` | `/refactoring` |
+| New feature, plan, or design decision | `idea-management` | `/design` |
+| `docs/todo.md` or design doc out of sync | `idea-management` | `/design` |
+| Pre-deploy review | `security`, `refactoring` | `/security` `/refactoring` `/cicd` `/design` |
+| New Lambda function (full) | `security`, `refactoring` | `/security` `/refactoring` `/cicd` `/design` |
+| Any completed change | — | `/changelog` |
 
 **Severity protocol:**
 - `[BLOCK]` finding → fix before proceeding, no exceptions
@@ -156,3 +158,34 @@ Write a record when:
 
 **This is working if:** the same class of bug never appears twice without a prior ERR record
 that should have prevented it.
+
+## 8. Session Planning
+
+**Write a plan before ending any session with unfinished work.**
+
+Write a plan file in `docs/plan/` whenever:
+- You finish a session but the active project still has open goals.
+- A significant decision was made that the next session needs to understand before touching code.
+- A new project phase is starting and the entry point is non-obvious.
+
+**File naming:**
+```
+YY-MM-DD Short Title.md
+```
+Example: `26-06-08 P5 Document Engine.md`
+
+**Required sections (copy from `docs/plan/template.md`):**
+- `Context` — what was happening and why this is next
+- `Goals` — ordered, with a concrete verify condition for each
+- `Known Blockers` — prerequisites (credentials, cost budget, AWS access) that must be true before starting
+- `Files to Read First` — files the next session must read before touching anything
+- `Out of Scope` — work explicitly deferred
+
+After writing the file, add one index row to `docs/plan/README.md`.
+Close a plan by adding a `Closed:` date and the changelog reference to the plan file and index row.
+
+**At session start:** check `docs/plan/README.md` for open plans. If one covers your active
+project, read it before reading any code.
+
+**This is working if:** a new session can orient itself and start the right task without asking
+"where did we leave off?"
