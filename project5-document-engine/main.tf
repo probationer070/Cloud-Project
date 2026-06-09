@@ -153,10 +153,19 @@ resource "aws_sns_topic_subscription" "email" {
 # 6. Lambda 패키징
 ########################################################
 
+resource "terraform_data" "install_ingest_deps" {
+  triggers_replace = [filemd5("${path.module}/lambda/ingest/requirements.txt")]
+
+  provisioner "local-exec" {
+    command = "uv pip install -r ${path.module}/lambda/ingest/requirements.txt --target ${path.module}/lambda/ingest --quiet"
+  }
+}
+
 data "archive_file" "ingest" {
   type        = "zip"
-  source_file = "${path.module}/lambda/ingest/index.py"
+  source_dir  = "${path.module}/lambda/ingest"
   output_path = "${path.module}/.terraform/lambda-ingest.zip"
+  depends_on  = [terraform_data.install_ingest_deps]
 }
 
 data "archive_file" "query" {
@@ -177,7 +186,7 @@ resource "aws_lambda_function" "ingest" {
   runtime          = "python3.12"
   filename         = data.archive_file.ingest.output_path
   source_code_hash = data.archive_file.ingest.output_base64sha256
-  timeout          = 300 # Textract + 임베딩 생성이 오래 걸림
+  timeout          = 300 # PDF 파싱 + 임베딩 생성이 오래 걸림
   memory_size      = 512
 
   environment {

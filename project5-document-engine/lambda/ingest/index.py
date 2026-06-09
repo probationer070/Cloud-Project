@@ -11,6 +11,7 @@ Ingest Lambda — 문서 처리 파이프라인
   7. 처리 결과 SNS 알림
 """
 
+import io
 import json
 import os
 import re
@@ -21,6 +22,7 @@ import hmac
 import hashlib
 import datetime
 import boto3
+import pypdf
 from boto3.dynamodb.conditions import Key
 
 # ── 환경변수 ──────────────────────────────────────────
@@ -29,12 +31,11 @@ OPENSEARCH_INDEX    = os.environ.get("OPENSEARCH_INDEX", "documents")
 DYNAMODB_TABLE      = os.environ["DYNAMODB_TABLE"]
 SNS_TOPIC_ARN       = os.environ["SNS_TOPIC_ARN"]
 BEDROCK_REGION      = os.environ.get("BEDROCK_REGION", "us-east-1")
-AWS_REGION          = os.environ.get("AWS_REGION", "ap-northeast-2")
+AWS_REGION          = os.environ.get("AWS_REGION", "us-east-1")
 
 CHUNK_SIZE    = int(os.environ.get("CHUNK_SIZE", "500"))    # 청크 크기 (단어 수)
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "50"))  # 청크 오버랩
 
-textract = boto3.client("textract", region_name=AWS_REGION)
 bedrock  = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 dynamodb = boto3.resource("dynamodb")
 sns      = boto3.client("sns")
@@ -90,15 +91,16 @@ def lambda_handler(event, context):
 ########################################################
 
 def extract_text(bucket: str, key: str) -> str:
-    """PDF / 이미지에서 텍스트 추출"""
-    ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
-
-    response = textract.detect_document_text(
-        Document={"S3Object": {"Bucket": bucket, "Name": key}}
-    )
-    blocks = response.get("Blocks", [])
-    lines  = [b["Text"] for b in blocks if b["BlockType"] == "LINE"]
-    return "\n".join(lines)
+    """PDF에서 텍스트 추출 (pypdf 사용 — Textract 구독 불필요)"""
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    pdf_bytes = obj["Body"].read()
+    reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+    pages = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            pages.append(text)
+    return "\n".join(pages)
 
 
 ########################################################

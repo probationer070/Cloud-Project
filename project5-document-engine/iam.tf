@@ -24,7 +24,7 @@ locals {
     Action = ["bedrock:InvokeModel"]
     Resource = [
       "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
-      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude*",
     ]
   }
 }
@@ -53,12 +53,6 @@ resource "aws_iam_role_policy" "ingest" {
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
         Resource = "${aws_s3_bucket.documents.arn}/*"
-      },
-      {
-        # Textract: 문서 텍스트 추출
-        Effect   = "Allow"
-        Action   = ["textract:DetectDocumentText", "textract:AnalyzeDocument"]
-        Resource = "*"
       },
       {
         # DynamoDB: 메타데이터 저장

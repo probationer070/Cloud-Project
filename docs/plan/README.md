@@ -10,4 +10,5 @@ Close a plan by adding a `Closed:` date and the closing changelog entry referenc
 
 | Date | Plan | Status |
 |------|------|--------|
-| 26-06-08 | [P5 Document Engine — Start and Validate](26-06-08%20P5%20Document%20Engine.md) | open |
+| 26-06-08 | [P5 Document Engine — Start and Validate](26-06-08%20P5%20Document%20Engine.md) | closed 26-06-10 |
+| 26-06-10 | [P5 Container Lambda ECR Switch](26-06-10%20P5%20Container%20Lambda%20ECR%20Switch.md) | open |

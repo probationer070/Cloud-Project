@@ -1,7 +1,7 @@
 # Plan: P5 Document Engine — Start and Validate
 
 **Opened:** 26-06-08
-**Closed:** —
+**Closed:** 26-06-10 — `docs/changelog/26-06-10 [upgrade] P5 Textract Replaced with pypdf uv Packaging and Container Prep.md`
 **Active Project:** P5 — Intelligent Document Analysis Engine (RAG)
 **Last Updated:** 26-06-10
 
@@ -19,10 +19,30 @@ P5 code was committed on 26-06-08. As of 26-06-10:
 - AWS account activation confirmed — Bedrock is accessible, account is active
 
 **Still outstanding:**
-- No deploy/validate run yet — Textract, OpenSearch, and query pipeline untested end-to-end
 - No design doc at `docs/design/p5-document-engine/design.md`
 - No remote-state backend (`backend.tf`) — P4 has one; P5 should follow the same pattern
 - `docs/todo.md` not updated for P5
+
+### Update — 26-06-10 (session 2: live validation)
+
+First real end-to-end test run. The pipeline was exercised through the query API and three
+sequential failures were found and fixed, each one previously masked by the one before it:
+
+1. **OpenSearch kNN 400** — the live index was created (via this plan's old Step 3) with
+   `dimension: 1536`, but the Lambda now embeds at 1024 (ERR-004). Resolved by deleting and
+   recreating the index at 1024; Step 3 in this plan corrected to match.
+2. **Claude 3 Haiku retired** — `ResourceNotFoundException ... marked by provider as Legacy`.
+   Upgraded `bedrock_model_id` to `anthropic.claude-3-5-haiku-20241022-v1:0` (ERR-005).
+3. **IAM glob mismatch** — `AccessDeniedException`; the policy glob `anthropic.claude-3-haiku*`
+   did not match `claude-3-5-haiku`. Widened to `anthropic.claude*` (ERR-005).
+
+**Decision (via `/office-hours`):** keep generation on Bedrock Claude rather than pivoting to
+Gemini, for portfolio differentiation from P4 — recorded in ADR 0003.
+
+**Goal 3 (validate) is still OPEN.** Remaining blocker: Bedrock **model access** for Claude
+3.5 Haiku must be granted in the console (`us-east-1` → Bedrock → Model access). This is
+separate from the IAM fix. Once granted and `terraform apply` has pushed the new model env
+var, re-run Step 6/7 and confirm the query API returns `answer` + `sources`.
 
 Cost warning: OpenSearch `t3.small.search` costs ~$0.036/hr → ~$26/month.
 **Run `terraform destroy` immediately after each test session.**
@@ -57,7 +77,7 @@ Cost warning: OpenSearch `t3.small.search` costs ~$0.036/hr → ~$26/month.
 - [x] AWS account activation — confirmed active (Bedrock accessible as of 26-06-10)
 - [x] `variables.tf` `suffix` and `alert_email` — already set (`jaehwan-20250608`, `qkrwoghks0717@gmail.com`)
 - [ ] AWS Bedrock model access in `us-east-1`: `amazon.titan-embed-text-v2:0` and
-      `anthropic.claude-3-haiku-20240307-v1:0` — verify "Access granted" in Bedrock console before `terraform apply`
+      `anthropic.claude-3-5-haiku-20241022-v1:0` — verify "Access granted" in Bedrock console before `terraform apply` (Claude 3 Haiku retired — see ERR-005)
 - [ ] Bootstrap S3 state bucket must exist before adding `backend.tf` for P5 (Goal 5)
 - [ ] Cost budget: OpenSearch runs at ~$0.86/day — destroy immediately after testing
 
@@ -101,7 +121,7 @@ cd ..
 
 ```powershell
 $ENDPOINT = terraform output -raw opensearch_endpoint
-$REGION   = "ap-northeast-2"
+$REGION   = "us-east-1"
 $KEY      = aws configure get aws_access_key_id
 $SECRET   = aws configure get aws_secret_access_key
 
@@ -109,7 +129,7 @@ curl.exe -X PUT "$ENDPOINT/documents" `
   --aws-sigv4 "aws:amz:${REGION}:es" `
   --user "${KEY}:${SECRET}" `
   -H "Content-Type: application/json" `
-  -d '{\"settings\":{\"index\":{\"knn\":true,\"knn.space_type\":\"cosinesimil\"}},\"mappings\":{\"properties\":{\"doc_id\":{\"type\":\"keyword\"},\"source_key\":{\"type\":\"keyword\"},\"chunk_index\":{\"type\":\"integer\"},\"total_chunks\":{\"type\":\"integer\"},\"text\":{\"type\":\"text\",\"analyzer\":\"standard\"},\"word_count\":{\"type\":\"integer\"},\"indexed_at\":{\"type\":\"date\"},\"embedding\":{\"type\":\"knn_vector\",\"dimension\":1536,\"method\":{\"name\":\"hnsw\",\"space_type\":\"cosinesimil\",\"engine\":\"nmslib\"}}}}}'
+  -d '{\"settings\":{\"index\":{\"knn\":true,\"knn.space_type\":\"cosinesimil\"}},\"mappings\":{\"properties\":{\"doc_id\":{\"type\":\"keyword\"},\"source_key\":{\"type\":\"keyword\"},\"chunk_index\":{\"type\":\"integer\"},\"total_chunks\":{\"type\":\"integer\"},\"text\":{\"type\":\"text\",\"analyzer\":\"standard\"},\"word_count\":{\"type\":\"integer\"},\"indexed_at\":{\"type\":\"date\"},\"embedding\":{\"type\":\"knn_vector\",\"dimension\":1024,\"method\":{\"name\":\"hnsw\",\"space_type\":\"cosinesimil\",\"engine\":\"nmslib\"}}}}}'
 ```
 Expected response: `{"acknowledged":true,"shards_acknowledged":true,"index":"documents"}`
 

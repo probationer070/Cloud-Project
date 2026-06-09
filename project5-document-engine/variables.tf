@@ -40,7 +40,7 @@ variable "bedrock_region" {
 variable "bedrock_model_id" {
   description = "답변 생성용 Claude 모델"
   type        = string
-  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+  default     = "anthropic.claude-3-5-haiku-20241022-v1:0"
 }
 
 # ── 청크 설정 ─────────────────────────────────────────

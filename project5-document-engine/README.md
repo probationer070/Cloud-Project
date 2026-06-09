@@ -3,7 +3,7 @@
 > **Standalone project** — P1–P4 do NOT need to be deployed. P5 creates all its own AWS resources independently.
 >
 > **Prerequisites:**
-> 1. **AWS account must be fully activated** — payment method verified ($1 hold), identity verification complete, and a support plan selected (Basic/free is fine). If any step is pending, all premium services (Textract, Bedrock, OpenSearch) will be blocked. AWS Console → Account to check. Activation can take up to 24 hours.
+> 1. **AWS account must be fully activated** — payment method verified ($1 hold), identity verification complete, and a support plan selected (Basic/free is fine). If any step is pending, all premium services (Bedrock, OpenSearch) will be blocked. AWS Console → Account to check. Activation can take up to 24 hours.
 > 2. **Bedrock model access** must be enabled in `us-east-1` before deploying (Bedrock calls are cross-region to us-east-1 regardless of `aws_region`).
 
 ## ⚠️ Cost Warning
@@ -16,7 +16,6 @@
 | DynamoDB | 25 GB | free |
 | Bedrock (Titan Embeddings) | none | **~$0.0001/1K tokens** |
 | Bedrock (Claude Haiku) | none | **~$0.00025/1K input tokens** |
-| Textract | 1,000 pages/mo | free tier |
 
 > **OpenSearch is the cost driver.** Run `terraform destroy` immediately after testing — leaving it running overnight costs ~$0.86.
 
@@ -27,10 +26,10 @@
 ```
 [Document Upload]
   PDF → S3 → Lambda(Ingest)
-               ↓ Textract    ↓ Chunk Splitting
+               ↓ pypdf       ↓ Chunk Splitting
                Text Extract  500-word chunks
                     ↓
-              Titan Embeddings  (text → 1536-dim vectors)
+              Titan Embeddings  (text → 1024-dim vectors)
                     ↓
               OpenSearch Index (vector storage)
                     ↓
@@ -54,16 +53,39 @@
 
 ```
 project5-document-engine/
-├── main.tf                  # S3, OpenSearch, DynamoDB, Lambda×2, API GW
-├── iam.tf                   # Least-privilege IAM per Lambda
+├── main.tf                      # S3, OpenSearch, DynamoDB, Lambda×2, API GW
+├── iam.tf                       # Least-privilege IAM per Lambda
 ├── variables.tf
-├── outputs.tf               # Step-by-step test commands
+├── outputs.tf                   # Step-by-step test commands
 └── lambda/
-    ├── ingest/index.py      # Document processing pipeline
-    └── query/index.py       # Semantic search + answer generation
+    ├── ingest/
+    │   ├── index.py             # Document processing pipeline
+    │   └── requirements.txt    # pypdf — bundled by terraform apply
+    └── query/
+        └── index.py             # Semantic search + answer generation
 └── sample_docs/
-    └── create_sample_pdf.py # Script to generate test PDF
+    └── create_sample_pdf.py     # Script to generate test PDF
 ```
+
+---
+
+## Lambda Packaging
+
+Both Lambda functions are deployed as **zip packages**, not container images. Dockerfiles exist in each Lambda directory but are **not used** by Terraform.
+
+| | Ingest | Query |
+|---|---|---|
+| Deployment method | zip (`archive_file`) | zip (`archive_file`) |
+| Dependency install | `uv pip install` runs locally during `terraform apply` | none (no extra deps) |
+| Dockerfile | present — unused | present — unused |
+
+**How zip deployment works (Terraform):**
+1. `terraform_data` runs `uv pip install -r requirements.txt --target lambda/ingest/` on your local machine
+2. `archive_file` zips the entire `lambda/ingest/` directory (code + installed packages)
+3. The zip is uploaded to Lambda as the deployment package
+
+**What the Dockerfiles are for:**  
+They are prepared for a future switch to container image deployment (`package_type = "Image"` + ECR). To use them, `main.tf` would need to change from `filename =` to `image_uri =` and add an ECR push step. Until then, the Dockerfiles are inert.
 
 ---
 
@@ -73,7 +95,7 @@ project5-document-engine/
 
 In the AWS Console (region: **us-east-1**), request access to both models:
 - `amazon.titan-embed-text-v2:0`
-- `anthropic.claude-3-haiku-20240307-v1:0`
+- `anthropic.claude-3-5-haiku-20241022-v1:0`
 
 > Models take a few minutes to activate. Confirm status shows **"Access granted"** before proceeding.
 
@@ -102,23 +124,14 @@ terraform apply
 ```
 
 > OpenSearch takes **10–15 minutes** to provision. Wait for `terraform apply` to complete fully before the next step.
-
-After apply completes, note the outputs:
-```
-documents_bucket      = "p5-doc-engine-docs-..."
-query_api_endpoint    = "https://xxxxx.execute-api.us-east-1.amazonaws.com/v1/query"
-step1_create_index    = "curl -X PUT ..."
-step4_check_index     = "curl ..."
-step5_query_test      = "curl -X POST ..."
-```
+>
+> `terraform apply` also runs `pip install` automatically to bundle pypdf into the Ingest Lambda.
 
 ### Step 4. Create the OpenSearch Index
 
-Run the `step1_create_index` command from `terraform output`. This creates the `knn_vector` field mapping (1536 dimensions).
-
 **Windows (PowerShell):**
 ```powershell
-terraform output -raw step1_create_index | Invoke-Expression
+terraform output -raw step1_create_index
 ```
 **Linux / macOS:**
 ```bash
@@ -137,11 +150,10 @@ Expected response:
 cd sample_docs
 pip install reportlab
 python create_sample_pdf.py
+cd ..
 
-# Upload — triggers Ingest Lambda automatically
-aws s3 cp sample.pdf s3://[documents_bucket]/sample.pdf
-
-# Tail logs in real time (Ctrl+C to stop)
+$BUCKET = terraform output -raw documents_bucket
+aws s3 cp sample_docs\sample.pdf s3://$BUCKET/sample.pdf
 aws logs tail /aws/lambda/p5-doc-engine-ingest --follow --region us-east-1
 ```
 **Linux / macOS:**
@@ -149,23 +161,20 @@ aws logs tail /aws/lambda/p5-doc-engine-ingest --follow --region us-east-1
 cd sample_docs
 pip install reportlab
 python3 create_sample_pdf.py
+cd ..
 
-# Upload — triggers Ingest Lambda automatically
-aws s3 cp sample.pdf s3://[documents_bucket]/sample.pdf
-
-# Tail logs in real time (Ctrl+C to stop)
+BUCKET=$(terraform output -raw documents_bucket)
+aws s3 cp sample_docs/sample.pdf s3://$BUCKET/sample.pdf
 aws logs tail /aws/lambda/p5-doc-engine-ingest --follow --region us-east-1
 ```
 
-Expected log output (Korean log messages from the Lambda):
+Expected log output:
 ```
 [Ingest] 처리 시작: s3://[bucket]/sample.pdf → doc_id=xxxxxxxx
 [Ingest] 텍스트 추출 완료: NNN자
 [Ingest] 청크 분할 완료: N개
 [Ingest] ✅ 완료: N개 청크 색인
 ```
-
-> Note: Textract runs **synchronously** via `detect_document_text` — there is no async job ID. Multi-page PDFs are supported for the first page only; use the provided single-page sample PDF for testing.
 
 ### Step 6. Verify Processing
 
@@ -175,22 +184,26 @@ Check DynamoDB for `status=completed`:
 ```powershell
 aws dynamodb scan `
   --table-name p5-doc-engine-documents `
-  --region us-east-1
+  --region us-east-1 `
+  --query "Items[*].{status:status.S, chunks:chunk_count.N, source:source_key.S}" `
+  --output table
 ```
 **Linux / macOS:**
 ```bash
 aws dynamodb scan \
   --table-name p5-doc-engine-documents \
-  --region us-east-1
+  --region us-east-1 \
+  --query "Items[*].{status:status.S, chunks:chunk_count.N, source:source_key.S}" \
+  --output table
 ```
 
-Expected: a record with `"status": {"S": "completed"}` and `chunk_count > 0`.
+Expected: a row with `status=completed` and `chunks > 0`.
 
-Check OpenSearch document count (run the `step4_check_index` output command):
+Check OpenSearch document count:
 
 **Windows (PowerShell):**
 ```powershell
-terraform output -raw step4_check_index | Invoke-Expression
+terraform output -raw step4_check_index | & "$env:PROGRAMFILES\Git\usr\bin\bash.exe"
 ```
 **Linux / macOS:**
 ```bash
@@ -201,27 +214,18 @@ Expected: `{"count": N, ...}` where N > 0.
 
 ### Step 7. Query Testing
 
-Run the `step5_query_test` command from `terraform output`, or test directly:
-
 **Windows (PowerShell):**
 ```powershell
-Invoke-RestMethod `
-  -Uri "[query_api_endpoint]" `
-  -Method POST `
-  -ContentType "application/json" `
+$API = terraform output -raw query_api_endpoint
+Invoke-RestMethod -Uri $API -Method POST -ContentType "application/json" `
   -Body '{"question": "What was the Q4 revenue?"}'
 ```
 **Linux / macOS:**
 ```bash
-curl -X POST [query_api_endpoint] \
+API=$(terraform output -raw query_api_endpoint)
+curl -X POST $API \
   -H "Content-Type: application/json" \
   -d '{"question": "What was the Q4 revenue?"}'
-```
-**Windows (curl.exe):**
-```powershell
-curl.exe -X POST [query_api_endpoint] `
-  -H "Content-Type: application/json" `
-  -d '{\"question\": \"What was the Q4 revenue?\"}'
 ```
 
 Expected response:
@@ -234,9 +238,14 @@ Expected response:
 
 **Key semantic search test** — verify different phrasing retrieves the same content:
 
+**Windows (PowerShell):**
+```powershell
+Invoke-RestMethod -Uri $API -Method POST -ContentType "application/json" `
+  -Body '{"question": "How much did the cloud migration save?"}'
+```
 **Linux / macOS:**
 ```bash
-curl -X POST [query_api_endpoint] \
+curl -X POST $API \
   -H "Content-Type: application/json" \
   -d '{"question": "How much did the cloud migration save?"}'
 ```
@@ -259,22 +268,25 @@ Expected: Claude retrieves AWS-related chunks and generates an answer even thoug
 
 ## Common Errors
 
-**Ingest Lambda times out or exits with no chunks**
-→ Textract may still be processing. Wait 30–60 seconds and check CloudWatch logs again.
+**Ingest Lambda exits with no chunks**
+→ Check CloudWatch logs for the specific error.
 → Verify the PDF is not password-protected or empty.
 
 **Query API returns 500 with "no documents indexed"**
-→ OpenSearch index may not exist. Re-run the `step1_create_index` command.
+→ OpenSearch index may not exist. Re-run the Step 4 index creation command.
 → Run `step4_check_index` to confirm document count > 0.
 
 **Bedrock returns `AccessDeniedException`**
 → Model access was not granted in `us-east-1`. Check the AWS Console → Bedrock → Model access.
-→ Confirm the Lambda IAM role has `bedrock:InvokeModel` in `iam.tf`.
+→ Confirm the Lambda IAM role has `bedrock:InvokeModel` in `iam.tf`. The policy globs the
+  Claude family (`anthropic.claude*`) — a version-specific glob would miss `claude-3-5-haiku`.
 
-**Textract console shows "Complete your account setup" or returns `SubscriptionRequiredException`**
-→ Textract in `ap-northeast-2` (Seoul) requires a separate service subscription agreement — do not use that region. The default `aws_region` is `us-east-1` where no subscription is required.
-→ If you changed `aws_region` to `ap-northeast-2`, revert it to `us-east-1`.
-→ Unlike Bedrock, Textract does NOT require activation via the console once your account is active and you are in a supported region.
+**Bedrock returns `ResourceNotFoundException ... marked by provider as Legacy`**
+→ The configured `bedrock_model_id` is a retired model. Set it to an active model (default is
+  `anthropic.claude-3-5-haiku-20241022-v1:0`) and re-run `terraform apply`. See ERR-005.
+
+**pypdf extracts empty text**
+→ The PDF may be a scanned image (no embedded text). pypdf only extracts embedded text — use a PDF generated with `create_sample_pdf.py` for testing.
 
 **`terraform apply` fails with OpenSearch domain already exists**
 → A prior `terraform destroy` may not have completed. Check AWS Console → OpenSearch → Domains.
@@ -288,18 +300,14 @@ Expected: Claude retrieves AWS-related chunks and generates an answer even thoug
 
 **Windows (PowerShell):**
 ```powershell
-# 1. Empty the S3 bucket
-aws s3 rm s3://[documents_bucket] --recursive
-
-# 2. Destroy Terraform resources
+$BUCKET = terraform output -raw documents_bucket
+aws s3 rm s3://$BUCKET --recursive
 terraform destroy
 ```
 **Linux / macOS:**
 ```bash
-# 1. Empty the S3 bucket
-aws s3 rm s3://[documents_bucket] --recursive
-
-# 2. Destroy Terraform resources
+BUCKET=$(terraform output -raw documents_bucket)
+aws s3 rm s3://$BUCKET --recursive
 terraform destroy
 ```
 
