@@ -90,7 +90,7 @@ def lambda_handler(event, context):
 def get_embedding(text: str) -> list[float]:
     body = json.dumps({
         "inputText":  text[:8000],
-        "dimensions": 1536,
+        "dimensions": 1024,
         "normalize":  True,
     })
     resp = bedrock.invoke_model(

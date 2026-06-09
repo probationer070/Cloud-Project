@@ -34,7 +34,7 @@ AWS_REGION          = os.environ.get("AWS_REGION", "ap-northeast-2")
 CHUNK_SIZE    = int(os.environ.get("CHUNK_SIZE", "500"))    # 청크 크기 (단어 수)
 CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "50"))  # 청크 오버랩
 
-textract = boto3.client("textract")
+textract = boto3.client("textract", region_name=AWS_REGION)
 bedrock  = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
 dynamodb = boto3.resource("dynamodb")
 sns      = boto3.client("sns")
@@ -133,7 +133,7 @@ def get_embedding(text: str) -> list[float]:
     """텍스트 → 1536차원 벡터 (Titan Embeddings V2)"""
     body = json.dumps({
         "inputText":  text[:8000],  # Titan V2 최대 입력 제한
-        "dimensions": 1536,
+        "dimensions": 1024,
         "normalize":  True,
     })
     resp = bedrock.invoke_model(

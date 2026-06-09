@@ -1,153 +1,328 @@
-# Project 5: 지능형 문서 분석 엔진 (RAG 기반)
+# Project 5: Intelligent Document Analysis Engine (RAG-based)
 
-## ⚠️ 비용 경고 — 반드시 읽으세요
-```
-OpenSearch (t3.small): ~$0.036/시간 → 하루 ~$0.86 → 한 달 방치 시 ~$26
-→ 테스트 완료 즉시 terraform destroy 실행 필수!
-```
+> **Standalone project** — P1–P4 do NOT need to be deployed. P5 creates all its own AWS resources independently.
+>
+> **Prerequisites:**
+> 1. **AWS account must be fully activated** — payment method verified ($1 hold), identity verification complete, and a support plan selected (Basic/free is fine). If any step is pending, all premium services (Textract, Bedrock, OpenSearch) will be blocked. AWS Console → Account to check. Activation can take up to 24 hours.
+> 2. **Bedrock model access** must be enabled in `us-east-1` before deploying (Bedrock calls are cross-region to us-east-1 regardless of `aws_region`).
 
-## 아키텍처 (RAG 패턴)
+## ⚠️ Cost Warning
+
+| Service | Free Tier | Note |
+|---------|-----------|------|
+| OpenSearch (t3.small.search) | none | **~$0.036/hr → ~$0.86/day** |
+| Lambda | 1M requests/mo | free |
+| S3 | 5 GB | free |
+| DynamoDB | 25 GB | free |
+| Bedrock (Titan Embeddings) | none | **~$0.0001/1K tokens** |
+| Bedrock (Claude Haiku) | none | **~$0.00025/1K input tokens** |
+| Textract | 1,000 pages/mo | free tier |
+
+> **OpenSearch is the cost driver.** Run `terraform destroy` immediately after testing — leaving it running overnight costs ~$0.86.
+
+---
+
+## Architecture (RAG Pattern)
+
 ```
-[문서 업로드]
+[Document Upload]
   PDF → S3 → Lambda(Ingest)
-               ↓ Textract    ↓ 청크 분할
-               텍스트 추출   500단어 단위
+               ↓ Textract    ↓ Chunk Splitting
+               Text Extract  500-word chunks
                     ↓
-              Titan 임베딩  (텍스트 → 1536차원 벡터)
+              Titan Embeddings  (text → 1536-dim vectors)
                     ↓
-              OpenSearch 색인 (벡터 저장)
+              OpenSearch Index (vector storage)
                     ↓
-              DynamoDB 메타데이터 저장
+              DynamoDB metadata storage
 
-[질문 → 답변]
-  질문 → API Gateway → Lambda(Query)
-                         ↓
-                   Titan 임베딩 (질문 벡터화)
-                         ↓
-                   OpenSearch kNN 검색 (유사 청크 top-5)
-                         ↓
-                   Bedrock Claude (청크 기반 답변 생성)
-                         ↓
-                   답변 + 출처 반환
-```
-
-## 구성 파일
-```
-project5-document-engine/
-├── main.tf                  # S3, OpenSearch, DynamoDB, Lambda×2, API GW
-├── iam.tf                   # Lambda별 최소 권한
-├── variables.tf
-├── outputs.tf               # Step-by-Step 테스트 명령어
-└── lambda/
-    ├── ingest/index.py      # 문서 처리 파이프라인
-    └── query/index.py       # 의미 검색 + 답변 생성
-└── sample_docs/
-    └── create_sample_pdf.py # 테스트용 PDF 생성 스크립트
+[Question → Answer]
+  Question → API Gateway → Lambda(Query)
+                             ↓
+                       Titan Embeddings (vectorize question)
+                             ↓
+                       OpenSearch kNN search (top-5 similar chunks)
+                             ↓
+                       Bedrock Claude (generate answer from chunks)
+                             ↓
+                       Answer + source references returned
 ```
 
 ---
 
-## 배포 및 테스트 순서
+## File Structure
 
-### Step 0. 사전 준비
+```
+project5-document-engine/
+├── main.tf                  # S3, OpenSearch, DynamoDB, Lambda×2, API GW
+├── iam.tf                   # Least-privilege IAM per Lambda
+├── variables.tf
+├── outputs.tf               # Step-by-step test commands
+└── lambda/
+    ├── ingest/index.py      # Document processing pipeline
+    └── query/index.py       # Semantic search + answer generation
+└── sample_docs/
+    └── create_sample_pdf.py # Script to generate test PDF
+```
+
+---
+
+## Deployment Steps
+
+### Step 1. Enable Bedrock Model Access
+
+In the AWS Console (region: **us-east-1**), request access to both models:
+- `amazon.titan-embed-text-v2:0`
+- `anthropic.claude-3-haiku-20240307-v1:0`
+
+> Models take a few minutes to activate. Confirm status shows **"Access granted"** before proceeding.
+
+### Step 2. Edit variables.tf
+
 ```hcl
-# variables.tf 수정
-suffix      = "홍길동-20250527"
-alert_email = "your@email.com"
+suffix      = "yourname-20250527"   # ← unique suffix for resource names (required)
+alert_email = "your@email.com"      # ← email for SNS alerts (required)
 ```
 
-```bash
-# Bedrock 모델 액세스 확인 (us-east-1)
-# - amazon.titan-embed-text-v2:0
-# - anthropic.claude-3-haiku-20240307-v1:0
-```
+### Step 3. Deploy Infrastructure
 
-### Step 1. 배포
-```bash
+**Windows (PowerShell):**
+```powershell
+cd project5-document-engine
 terraform init
 terraform plan
 terraform apply
-# OpenSearch 생성에 10~15분 소요 — 기다리세요
 ```
-
-### Step 2. OpenSearch 인덱스 생성
+**Linux / macOS:**
 ```bash
-# outputs의 step1_create_index 명령어 실행
-# knn_vector 필드 매핑 생성 (1536차원)
+cd project5-document-engine
+terraform init
+terraform plan
+terraform apply
 ```
 
-### Step 3. 테스트 PDF 생성 및 업로드
+> OpenSearch takes **10–15 minutes** to provision. Wait for `terraform apply` to complete fully before the next step.
+
+After apply completes, note the outputs:
+```
+documents_bucket      = "p5-doc-engine-docs-..."
+query_api_endpoint    = "https://xxxxx.execute-api.us-east-1.amazonaws.com/v1/query"
+step1_create_index    = "curl -X PUT ..."
+step4_check_index     = "curl ..."
+step5_query_test      = "curl -X POST ..."
+```
+
+### Step 4. Create the OpenSearch Index
+
+Run the `step1_create_index` command from `terraform output`. This creates the `knn_vector` field mapping (1536 dimensions).
+
+**Windows (PowerShell):**
+```powershell
+terraform output -raw step1_create_index | Invoke-Expression
+```
+**Linux / macOS:**
+```bash
+eval "$(terraform output -raw step1_create_index)"
+```
+
+Expected response:
+```json
+{"acknowledged": true, "shards_acknowledged": true, "index": "documents"}
+```
+
+### Step 5. Generate and Upload a Test PDF
+
+**Windows (PowerShell):**
+```powershell
+cd sample_docs
+pip install reportlab
+python create_sample_pdf.py
+
+# Upload — triggers Ingest Lambda automatically
+aws s3 cp sample.pdf s3://[documents_bucket]/sample.pdf
+
+# Tail logs in real time (Ctrl+C to stop)
+aws logs tail /aws/lambda/p5-doc-engine-ingest --follow --region us-east-1
+```
+**Linux / macOS:**
 ```bash
 cd sample_docs
 pip install reportlab
 python3 create_sample_pdf.py
 
-# S3 업로드 → Ingest Lambda 자동 실행
-aws s3 cp sample.pdf s3://[documents-bucket]/sample.pdf
+# Upload — triggers Ingest Lambda automatically
+aws s3 cp sample.pdf s3://[documents_bucket]/sample.pdf
 
-# Lambda 로그 실시간 확인
-aws logs tail /aws/lambda/p5-doc-engine-ingest --follow
+# Tail logs in real time (Ctrl+C to stop)
+aws logs tail /aws/lambda/p5-doc-engine-ingest --follow --region us-east-1
 ```
 
-### Step 4. 처리 완료 확인
-```bash
-# DynamoDB에서 status=completed 확인
-aws dynamodb scan --table-name p5-doc-engine-documents
-
-# OpenSearch 색인 건수 확인
-# outputs의 step4_check_index 명령어 실행
+Expected log output (Korean log messages from the Lambda):
+```
+[Ingest] 처리 시작: s3://[bucket]/sample.pdf → doc_id=xxxxxxxx
+[Ingest] 텍스트 추출 완료: NNN자
+[Ingest] 청크 분할 완료: N개
+[Ingest] ✅ 완료: N개 청크 색인
 ```
 
-### Step 5. 질의응답 테스트
-```bash
-# outputs의 step5_query_test 명령어 실행
+> Note: Textract runs **synchronously** via `detect_document_text` — there is no async job ID. Multi-page PDFs are supported for the first page only; use the provided single-page sample PDF for testing.
 
-# 핵심 테스트: 표현이 달라도 같은 내용 검색되는지
+### Step 6. Verify Processing
+
+Check DynamoDB for `status=completed`:
+
+**Windows (PowerShell):**
+```powershell
+aws dynamodb scan `
+  --table-name p5-doc-engine-documents `
+  --region us-east-1
+```
+**Linux / macOS:**
+```bash
+aws dynamodb scan \
+  --table-name p5-doc-engine-documents \
+  --region us-east-1
+```
+
+Expected: a record with `"status": {"S": "completed"}` and `chunk_count > 0`.
+
+Check OpenSearch document count (run the `step4_check_index` output command):
+
+**Windows (PowerShell):**
+```powershell
+terraform output -raw step4_check_index | Invoke-Expression
+```
+**Linux / macOS:**
+```bash
+eval "$(terraform output -raw step4_check_index)"
+```
+
+Expected: `{"count": N, ...}` where N > 0.
+
+### Step 7. Query Testing
+
+Run the `step5_query_test` command from `terraform output`, or test directly:
+
+**Windows (PowerShell):**
+```powershell
+Invoke-RestMethod `
+  -Uri "[query_api_endpoint]" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"question": "What was the Q4 revenue?"}'
+```
+**Linux / macOS:**
+```bash
 curl -X POST [query_api_endpoint] \
   -H "Content-Type: application/json" \
-  -d '{"question": "4분기 수익이 얼마인가요?"}'
-# → "Q4 Revenue hit 2 mil"과 의미적으로 매칭됨
-
-curl -X POST [query_api_endpoint] \
-  -H "Content-Type: application/json" \
-  -d '{"question": "클라우드 전환으로 얼마나 절감했나요?"}'
-# → AWS 관련 청크 검색 후 Claude가 답변 생성
+  -d '{"question": "What was the Q4 revenue?"}'
+```
+**Windows (curl.exe):**
+```powershell
+curl.exe -X POST [query_api_endpoint] `
+  -H "Content-Type: application/json" `
+  -d '{\"question\": \"What was the Q4 revenue?\"}'
 ```
 
-### Step 6. ⚠️ 즉시 삭제 (비용 차단)
+Expected response:
+```json
+{
+  "answer": "According to the document, Q4 Revenue hit 2 million...",
+  "sources": [{"chunk_id": "sample.pdf-chunk-3", "score": 0.94}]
+}
+```
+
+**Key semantic search test** — verify different phrasing retrieves the same content:
+
+**Linux / macOS:**
 ```bash
-aws s3 rm s3://[documents-bucket] --recursive
+curl -X POST [query_api_endpoint] \
+  -H "Content-Type: application/json" \
+  -d '{"question": "How much did the cloud migration save?"}'
+```
+
+Expected: Claude retrieves AWS-related chunks and generates an answer even though the question phrasing differs from the document text. This confirms the RAG vector search is working.
+
+---
+
+## Validation Checklist
+
+- [ ] `terraform output` shows `query_api_endpoint` and `documents_bucket`
+- [ ] OpenSearch index created — `step1_create_index` returns `"acknowledged": true`
+- [ ] PDF uploaded → Ingest Lambda triggered automatically (CloudWatch logs confirm)
+- [ ] DynamoDB record shows `status=completed` with `chunk_count > 0`
+- [ ] OpenSearch document count > 0 (`step4_check_index`)
+- [ ] Query API returns `answer` + `sources` array
+- [ ] Semantic search works — different phrasing retrieves the same content
+
+---
+
+## Common Errors
+
+**Ingest Lambda times out or exits with no chunks**
+→ Textract may still be processing. Wait 30–60 seconds and check CloudWatch logs again.
+→ Verify the PDF is not password-protected or empty.
+
+**Query API returns 500 with "no documents indexed"**
+→ OpenSearch index may not exist. Re-run the `step1_create_index` command.
+→ Run `step4_check_index` to confirm document count > 0.
+
+**Bedrock returns `AccessDeniedException`**
+→ Model access was not granted in `us-east-1`. Check the AWS Console → Bedrock → Model access.
+→ Confirm the Lambda IAM role has `bedrock:InvokeModel` in `iam.tf`.
+
+**Textract console shows "Complete your account setup" or returns `SubscriptionRequiredException`**
+→ Textract in `ap-northeast-2` (Seoul) requires a separate service subscription agreement — do not use that region. The default `aws_region` is `us-east-1` where no subscription is required.
+→ If you changed `aws_region` to `ap-northeast-2`, revert it to `us-east-1`.
+→ Unlike Bedrock, Textract does NOT require activation via the console once your account is active and you are in a supported region.
+
+**`terraform apply` fails with OpenSearch domain already exists**
+→ A prior `terraform destroy` may not have completed. Check AWS Console → OpenSearch → Domains.
+→ OpenSearch domain deletion can take 5–10 minutes after `terraform destroy`.
+
+---
+
+## Destroy Resources
+
+> **Run this immediately after testing — OpenSearch costs ~$0.86/day.**
+
+**Windows (PowerShell):**
+```powershell
+# 1. Empty the S3 bucket
+aws s3 rm s3://[documents_bucket] --recursive
+
+# 2. Destroy Terraform resources
 terraform destroy
+```
+**Linux / macOS:**
+```bash
+# 1. Empty the S3 bucket
+aws s3 rm s3://[documents_bucket] --recursive
 
-# AWS 콘솔에서 OpenSearch 삭제 완료 확인
-# https://ap-northeast-2.console.aws.amazon.com/esv3/home
+# 2. Destroy Terraform resources
+terraform destroy
+```
+
+After `terraform destroy` completes, confirm OpenSearch deletion in the AWS Console — OpenSearch domain deletion is asynchronous and can take several minutes:
+```
+AWS Console → OpenSearch → Domains → confirm "p5-doc-engine" is gone
+https://us-east-1.console.aws.amazon.com/esv3/home?region=us-east-1
 ```
 
 ---
 
-## 검증 체크리스트
-- [ ] OpenSearch 인덱스 생성 확인 (step1)
-- [ ] PDF 업로드 후 Ingest Lambda 자동 실행 확인
-- [ ] DynamoDB에 status=completed 저장 확인
-- [ ] OpenSearch 색인 건수 > 0 확인
-- [ ] 질문 API 호출 시 답변 + 출처 반환 확인
-- [ ] 의미 검색 동작 확인 (다른 표현으로 같은 내용 검색)
-- [ ] terraform destroy 완료 + AWS 콘솔 OpenSearch 삭제 확인
+## What is RAG?
 
----
-
-## RAG가 뭔가요? (면접 답변용)
-
-RAG(Retrieval-Augmented Generation)는 AI가 답변할 때
-학습 데이터가 아닌 **실제 문서에서 근거를 찾아 답변**하는 패턴입니다.
+RAG (Retrieval-Augmented Generation) is a pattern where an AI answers questions by
+**finding evidence in real documents** rather than relying solely on training data.
 
 ```
-일반 AI: 학습된 지식으로 답변 → 환각(Hallucination) 위험
-RAG:     문서 검색 → 근거 기반 답변 → 정확도 높음
+Standard AI: answers from training knowledge → risk of hallucination
+RAG:         retrieves documents → grounds answer in evidence → higher accuracy
 ```
 
-P5가 이걸 구현한 방식:
-1. 문서 → 벡터 변환 (의미를 숫자로)
-2. 질문 → 벡터 변환
-3. 벡터 유사도로 관련 문단 검색
-4. 검색된 문단을 근거로 Claude가 답변
+How P5 implements this:
+1. Document → vector embedding (encode meaning as numbers)
+2. Question → vector embedding
+3. Find related paragraphs by vector similarity
+4. Claude generates an answer grounded in the retrieved paragraphs

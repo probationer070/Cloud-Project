@@ -33,3 +33,5 @@ Use `docs/changelog/template.md` to create new entries.
 | 26-06-08 | upgrade | [GitHub Actions CI Pipeline with OIDC](26-06-08%20[upgrade]%20GitHub%20Actions%20CI%20Pipeline%20with%20OIDC.md) | `terraform-ci.yml`, `init-all.sh`, `README.md` |
 | 26-06-08 | bug | [TF Plugin Cache Dir Fmt Check Failure](26-06-08%20[bug]%20TF%20Plugin%20Cache%20Dir%20Fmt%20Check%20Failure.md) | `terraform-ci.yml` |
 | 26-06-08 | bug | [GitHub Actions OIDC Role and Plan Backend Fix](26-06-08%20[bug]%20GitHub%20Actions%20OIDC%20Role%20and%20Plan%20Backend%20Fix.md) | `bootstrap/main.tf`, `bootstrap/outputs.tf`, `.github/workflows/terraform-ci.yml` |
+| 26-06-10 | upgrade | [P5 README English Rewrite and Textract Region Fix](26-06-10%20[upgrade]%20P5%20README%20English%20Rewrite%20and%20Textract%20Region%20Fix.md) | `project5-document-engine/README.md`, `lambda/ingest/index.py` |
+| 26-06-10 | bug | [P5 Textract Subscription and Titan V2 Dimensions](26-06-10%20[bug]%20P5%20Textract%20Subscription%20and%20Titan%20V2%20Dimensions.md) | `variables.tf`, `lambda/ingest/index.py`, `lambda/query/index.py`, `outputs.tf` |
