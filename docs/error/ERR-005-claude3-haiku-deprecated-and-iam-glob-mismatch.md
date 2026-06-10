@@ -53,7 +53,11 @@ identity-based policy allows the bedrock:InvokeModel action"}
 
 **Error 2:** The IAM resource glob was written as `arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku*`. IAM `*` matches any suffix, but the literal prefix `anthropic.claude-3-haiku` is not a prefix of `anthropic.claude-3-5-haiku` — the new model inserts `-5` after `claude-3`. So the upgraded model ARN fell outside the allowed resource set and `bedrock:InvokeModel` was denied. The policy was silently tied to one specific model generation rather than to the Claude model family.
 
-A third gate (Bedrock console "model access" grant for Claude 3.5 Haiku in `us-east-1`) is required before the call fully succeeds, but that is an account-level console action, not a code defect — it is captured in Prevention below.
+> **Update (post-incident, 2026-06-11):** AWS has since **retired the Bedrock "Model access"
+> page**. Serverless foundation models auto-enable on first `InvokeModel`, and access is
+> controlled by IAM/SCPs — so there was never a separate "console grant" gate for this model.
+> The only residual account-level step is a possible one-time Anthropic **use-case form** for a
+> first-time account. With the IAM glob fixed, the call succeeds with no console toggle.
 
 ---
 
@@ -92,7 +96,7 @@ default = "anthropic.claude-3-5-haiku-20241022-v1:0"
 
 - [ ] When pinning a Bedrock model ID, confirm it is **not** marked Legacy/retired in the Bedrock console before committing it as a default
 - [ ] IAM resource globs for Bedrock models should match the **family** (`anthropic.claude*`), not one dated version — version-specific prefixes break on the next model bump
-- [ ] After changing `bedrock_model_id`, grant **model access** for the new model in the Bedrock console (`us-east-1` → Model access) — IAM permission and model-access consent are two separate gates
+- [ ] No separate Bedrock console "model access" grant is needed — that page is **retired**; serverless models auto-enable on first `InvokeModel` and access is governed by IAM. A first-time Anthropic call may still need a one-time use-case form (Bedrock console → Model catalog)
 - [ ] Whenever `terraform apply` changes a Lambda env var (`bedrock_model_id`), confirm the new value's ARN is covered by the IAM policy in `iam.tf`
 
 ### Agent / Checklist Update

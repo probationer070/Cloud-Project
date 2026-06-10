@@ -39,13 +39,76 @@ sequential failures were found and fixed, each one previously masked by the one 
 **Decision (via `/office-hours`):** keep generation on Bedrock Claude rather than pivoting to
 Gemini, for portfolio differentiation from P4 — recorded in ADR 0003.
 
-**Goal 3 (validate) is still OPEN.** Remaining blocker: Bedrock **model access** for Claude
-3.5 Haiku must be granted in the console (`us-east-1` → Bedrock → Model access). This is
-separate from the IAM fix. Once granted and `terraform apply` has pushed the new model env
-var, re-run Step 6/7 and confirm the query API returns `answer` + `sources`.
+**Goal 3 (validate) is still OPEN** — but the supposed final blocker was wrong. AWS has
+**retired the Bedrock "Model access" page**; serverless models auto-enable on first
+`InvokeModel` and access is governed purely by IAM (already fixed). There is no separate console
+grant to wait on. The only residual nuance: a first-time account may need to submit a one-time
+Anthropic use-case form (Bedrock console → Model catalog → the model). Once `terraform apply`
+has pushed the new model env var, re-run Step 6/7 and confirm the query API returns `answer` +
+`sources`.
+
+### Update — 26-06-11 (session 3: Goal 3 VALIDATED ✅)
+
+End-to-end query validation now passes. Three more stacked failures were found and fixed past
+the ERR-005 ones (full analysis in ERR-006):
+
+1. **kNN 400** — the live `documents` index had `embedding` mapped as `float`, not `knn_vector`
+   (auto-created by an ingest write before Step 4). Deleted + recreated with the explicit
+   `knn_vector` 1024 mapping (`index-mapping.json`), re-ingested.
+2. **On-demand model ID rejected** — Claude 3.5+ needs an **inference profile** ID
+   (`us.anthropic.claude-...`), not the bare foundation-model ID.
+3. **Model entitlement** — Claude 3.x is Legacy; Claude 4.x Haiku/Sonnet need an **AWS
+   Marketplace subscription** (admin-only). Only `us.anthropic.claude-opus-4-5-20251101-v1:0`
+   was entitled in this account, so `bedrock_model_id` defaults to it; `iam.tf` gained the
+   `inference-profile/` ARN.
+
+**Result:** `POST /query {"question":"What was the Q4 revenue?"}` → `200` with
+`"$2,000,000 ... 35% growth"` + `sources:["sample.pdf"]`, matching README Step 7. The canonical
+Q4 sample PDF (`create_sample_pdf.py`) was regenerated and uploaded for the demo.
+
+**Caveat:** default model is Opus 4.5 (expensive) only because it is the sole entitled model.
+Switch to Haiku 4.5 after an admin completes the Marketplace subscription. The Opus 4.5
+entitlement was still propagating during the test (one follow-up call returned "subscription
+still being processed — try again after 15 minutes").
 
 Cost warning: OpenSearch `t3.small.search` costs ~$0.036/hr → ~$26/month.
 **Run `terraform destroy` immediately after each test session.**
+
+### Update — 26-06-11 (session 4: Free Tier premise + cost efficiency)
+
+**Standing premise for this and every project in the repo: a Free Tier AWS account.**
+Cost efficiency is a first-class goal, not an afterthought. Re-evaluated P5 against that:
+
+- **OpenSearch — Free Tier eligible (for now).** The domain is a single-node
+  `t3.small.search` with 10GB gp3 EBS (`main.tf`). AWS OpenSearch free tier covers **750
+  hrs/month of one `t3.small.search` + 10GB EBS for the first 12 months** — enough for one
+  node running 24/7. So the "~$0.86/day / ~$26/month" figure above is the **post-free-tier**
+  (or second-node / month-13) cost, *not* what a fresh free-tier account pays. Still
+  **`terraform destroy` after each session** — it protects the 750-hr monthly budget, leaves
+  headroom for other OpenSearch use, and avoids a surprise bill once the 12 months lapse.
+  Minor caveat: free-tier EBS was historically specified as gp2; this domain uses gp3 (still
+  "General Purpose", should qualify) — confirm on the Billing → Free Tier page.
+
+- **Bedrock — the real cost, and never free.** Bedrock is **not** in the AWS Free Tier; every
+  Titan embedding + Claude generation call is billed per token. This is the only uncontrollable
+  P5 cost on a free-tier account. Opus 4.5 (~$5 / $25 per 1M in/out) is the *most expensive*
+  Anthropic model and was only the default because it was the **sole entitled model** in this
+  account (3.x is Legacy; 4.x Haiku/Sonnet need an admin Marketplace subscription — see ERR-006).
+  - **Action taken (this session):** `bedrock_model_id` default switched to the cost-efficient
+    `us.anthropic.claude-haiku-4-5-20251001-v1:0` (~$1 / $5 per 1M, ~5× cheaper than Opus).
+    **Contingent on the Claude Haiku 4.5 Marketplace subscription being active** — if it isn't,
+    generation returns AccessDenied / "subscription required"; fallback is to set
+    `bedrock_model_id` back to `us.anthropic.claude-opus-4-5-20251101-v1:0`. Reflected in README
+    Step 1 + variables.tf description.
+  - **Until then, minimize Bedrock spend:** keep `top_k`/chunk counts low (already `top_k=5`),
+    run only the handful of validation queries, and destroy promptly.
+
+- **Everything else is comfortably within Free Tier** at P5's volume: Lambda, S3, DynamoDB
+  (on-demand), API Gateway, CloudWatch, SNS. No action needed.
+
+**Net:** under the Free Tier premise, P5's cost discipline is two rules — (1) `terraform
+destroy` after every session (OpenSearch hour budget), and (2) default is now Haiku 4.5 — keep
+it (revert to Opus only if the Haiku subscription isn't active) and keep query volume small.
 
 ---
 
@@ -55,10 +118,10 @@ Cost warning: OpenSearch `t3.small.search` costs ~$0.036/hr → ~$26/month.
 
 2. ~~**Translate README to English**~~ — ✅ done 26-06-10
 
-3. **Deploy and validate** — run the full PowerShell deployment sequence below. All seven
-   checklist items in `project5-document-engine/README.md` must be checked off.
-   **Run `terraform destroy` when done.**
-   Verify: CloudWatch logs show `[Ingest] ✅ 완료: N개 청크 색인` and query API returns `answer` + `sources`.
+3. ~~**Deploy and validate**~~ — ✅ done 26-06-11 (session 3). Query API verified returning
+   `answer` + `sources` with the `$2,000,000` Q4 answer; see ERR-006 and the
+   `26-06-11 [bug] P5 Inference Profile and Model Entitlement Fix` changelog.
+   **Still run `terraform destroy` after each session** (OpenSearch cost).
 
 4. **Add design doc** — create `docs/design/p5-document-engine/design.md` following the
    pattern of `docs/design/p4-ai-chatbot/design.md`.
@@ -76,10 +139,18 @@ Cost warning: OpenSearch `t3.small.search` costs ~$0.036/hr → ~$26/month.
 
 - [x] AWS account activation — confirmed active (Bedrock accessible as of 26-06-10)
 - [x] `variables.tf` `suffix` and `alert_email` — already set (`jaehwan-20250608`, `qkrwoghks0717@gmail.com`)
-- [ ] AWS Bedrock model access in `us-east-1`: `amazon.titan-embed-text-v2:0` and
-      `anthropic.claude-3-5-haiku-20241022-v1:0` — verify "Access granted" in Bedrock console before `terraform apply` (Claude 3 Haiku retired — see ERR-005)
+- [x] Bedrock model access (resolved, see ERR-006): the "Model access" page is **retired**.
+      Titan `amazon.titan-embed-text-v2:0` auto-enables. Claude generation needs an **inference
+      profile** ID + account **entitlement** — 3.x is Legacy, 4.x Haiku/Sonnet need a Marketplace
+      subscription (admin). Default is now `us.anthropic.claude-haiku-4-5-20251001-v1:0` (cost);
+      requires the Haiku 4.5 subscription active, else fall back to Opus 4.5 (the model that was
+      already entitled).
 - [ ] Bootstrap S3 state bucket must exist before adding `backend.tf` for P5 (Goal 5)
-- [ ] Cost budget: OpenSearch runs at ~$0.86/day — destroy immediately after testing
+- [ ] Cost budget (Free Tier account premise): OpenSearch single `t3.small.search` + 10GB is
+      Free Tier eligible for 12 months (750 hrs/month) — ~$0.86/day only *after* that or with a
+      2nd node. Bedrock is **never** free (per-token); default is now the cheaper
+      `claude-haiku-4-5` (~5× under Opus) — needs the Haiku 4.5 Marketplace subscription active,
+      else revert to Opus 4.5. **Destroy after each session.** See session-4 update above.
 
 ---
 

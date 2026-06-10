@@ -38,9 +38,9 @@ variable "bedrock_region" {
 }
 
 variable "bedrock_model_id" {
-  description = "답변 생성용 Claude 모델"
+  description = "답변 생성용 Claude 모델 (inference profile 필수). Free Tier 비용 효율을 위해 Haiku 4.5 기본값 (~$1/$5 per 1M, Opus의 약 1/5). 단, Claude Haiku 4.5 Marketplace 구독(관리자)이 활성화돼 있어야 함 — 미구독 시 AccessDenied/구독 필요 오류 발생, 그 경우 us.anthropic.claude-opus-4-5-20251101-v1:0 로 임시 대체 (ERR-006 참고)."
   type        = string
-  default     = "anthropic.claude-3-5-haiku-20241022-v1:0"
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
 # ── 청크 설정 ─────────────────────────────────────────

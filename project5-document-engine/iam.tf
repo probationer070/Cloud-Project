@@ -25,6 +25,9 @@ locals {
     Resource = [
       "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
       "arn:aws:bedrock:*::foundation-model/anthropic.claude*",
+      # Claude 3.5+ requires an inference profile; allow the profile ARN plus the
+      # cross-region foundation-model ARNs it routes to (covered by the glob above).
+      "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude*",
     ]
   }
 }

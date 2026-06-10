@@ -4,7 +4,7 @@
 >
 > **Prerequisites:**
 > 1. **AWS account must be fully activated** — payment method verified ($1 hold), identity verification complete, and a support plan selected (Basic/free is fine). If any step is pending, all premium services (Bedrock, OpenSearch) will be blocked. AWS Console → Account to check. Activation can take up to 24 hours.
-> 2. **Bedrock model access** must be enabled in `us-east-1` before deploying (Bedrock calls are cross-region to us-east-1 regardless of `aws_region`).
+> 2. **Bedrock models** are reached cross-region in `us-east-1` regardless of `aws_region`. AWS has retired the old "Model access" page — serverless models now auto-enable on first `InvokeModel`, so there is no console grant step. For Anthropic Claude, a first-time account may need to submit a one-time use-case form (Bedrock console → Model catalog). Invoke permission itself is governed by the Lambda IAM role in `iam.tf`.
 
 ## ⚠️ Cost Warning
 
@@ -15,7 +15,7 @@
 | S3 | 5 GB | free |
 | DynamoDB | 25 GB | free |
 | Bedrock (Titan Embeddings) | none | **~$0.0001/1K tokens** |
-| Bedrock (Claude Haiku) | none | **~$0.00025/1K input tokens** |
+| Bedrock (Claude generation) | none (never Free Tier — billed per token) | Default **Haiku 4.5** (~$1/$5 per 1M in/out) for cost efficiency. Requires the Claude Haiku 4.5 **Marketplace subscription** (admin) — if not yet subscribed, fall back to **Opus 4.5** (~$5/$25 per 1M, ~5× pricier). See Step 1. |
 
 > **OpenSearch is the cost driver.** Run `terraform destroy` immediately after testing — leaving it running overnight costs ~$0.86.
 
@@ -91,13 +91,40 @@ They are prepared for a future switch to container image deployment (`package_ty
 
 ## Deployment Steps
 
-### Step 1. Enable Bedrock Model Access
+### Step 1. Bedrock Model Access
 
-In the AWS Console (region: **us-east-1**), request access to both models:
-- `amazon.titan-embed-text-v2:0`
-- `anthropic.claude-3-5-haiku-20241022-v1:0`
+AWS **retired the Bedrock "Model access" page.** Access now depends on three things, not a
+console toggle:
 
-> Models take a few minutes to activate. Confirm status shows **"Access granted"** before proceeding.
+**Embedding model — `amazon.titan-embed-text-v2:0`:** serverless, auto-enables on first
+`InvokeModel`. Nothing to do.
+
+**Generation model (Claude) — two real gates:**
+
+1. **Inference profile required.** Claude 3.5 and newer cannot be invoked by their bare
+   `foundation-model` ID — you must use a region-prefixed **inference profile** ID
+   (`us.anthropic.claude-...`). `bedrock_model_id` in `variables.tf` is already set to one.
+   List what your account has: `aws bedrock list-inference-profiles --region us-east-1`.
+2. **Account entitlement.** Not every Claude model is invocable:
+   - Claude **3.x** models are **Legacy** (denied for accounts with no recent usage).
+   - Claude **4.x Haiku / Sonnet** are served via **AWS Marketplace** and need a one-time
+     subscription performed by an **admin** with `aws-marketplace:Subscribe` /
+     `ViewSubscriptions`. The Lambda role cannot self-subscribe.
+
+   This project defaults to **`us.anthropic.claude-haiku-4-5-20251001-v1:0`** — the cost-efficient
+   choice for the Free Tier premise (~5× cheaper than Opus). It requires the Claude Haiku 4.5
+   **Marketplace subscription** (admin) to be active; if it is not, generation fails with an
+   AccessDenied / "subscription required" error. In that case fall back to the already-entitled
+   **`us.anthropic.claude-opus-4-5-20251101-v1:0`** (more expensive) until the subscription lands.
+
+> Verify a model is actually entitled before wiring it in:
+> ```bash
+> printf '{"anthropic_version":"bedrock-2023-05-31","max_tokens":20,"messages":[{"role":"user","content":"Say OK"}]}' > t.json
+> aws bedrock-runtime invoke-model --model-id us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+>   --body fileb://t.json --content-type application/json --region us-east-1 out.json && cat out.json
+> ```
+> Invoke permission itself comes from the Lambda's IAM role (`bedrock:InvokeModel` on both the
+> `inference-profile/` and `foundation-model/` ARNs in `iam.tf`), not a console toggle.
 
 ### Step 2. Edit variables.tf
 
@@ -129,9 +156,20 @@ terraform apply
 
 ### Step 4. Create the OpenSearch Index
 
-**Windows (PowerShell):**
+> ⚠️ **Create the index BEFORE uploading any document (Step 5).** If the Ingest Lambda writes a
+> chunk first, OpenSearch auto-creates `documents` with a dynamic mapping where `embedding` is a
+> plain `float` array, not `knn_vector` — and every query then fails with **HTTP 400**. If that
+> happens, delete and recreate the index (see Common Errors), then re-upload. See ERR-006.
+
+**Windows (PowerShell)** — the `step1_create_index` output is bash syntax that won't run in
+PowerShell, so use the bundled `index-mapping.json` (1024-dim `knn_vector` mapping):
 ```powershell
-terraform output -raw step1_create_index
+$ENDPOINT = terraform output -raw opensearch_endpoint
+$KEY = aws configure get aws_access_key_id
+$SECRET = aws configure get aws_secret_access_key
+curl.exe -X PUT "$ENDPOINT/documents" `
+  --aws-sigv4 "aws:amz:us-east-1:es" --user "${KEY}:${SECRET}" `
+  -H "Content-Type: application/json" -d "@index-mapping.json"
 ```
 **Linux / macOS:**
 ```bash
@@ -276,14 +314,38 @@ Expected: Claude retrieves AWS-related chunks and generates an answer even thoug
 → OpenSearch index may not exist. Re-run the Step 4 index creation command.
 → Run `step4_check_index` to confirm document count > 0.
 
+**Query API returns 500 wrapping `HTTP Error 400: Bad Request`**
+→ The OpenSearch kNN search was rejected — almost always because `embedding` is mapped as
+  `float`, not `knn_vector` (the index was auto-created by an ingest write before Step 4).
+  Check it: `GET /documents/_mapping` → `embedding` should be `"type":"knn_vector"`.
+→ Fix: delete and recreate the index with the correct mapping, then re-upload the PDF:
+  ```powershell
+  $ENDPOINT = terraform output -raw opensearch_endpoint
+  $KEY = aws configure get aws_access_key_id; $SECRET = aws configure get aws_secret_access_key
+  curl.exe -X DELETE "$ENDPOINT/documents" --aws-sigv4 "aws:amz:us-east-1:es" --user "${KEY}:${SECRET}"
+  curl.exe -X PUT "$ENDPOINT/documents" --aws-sigv4 "aws:amz:us-east-1:es" --user "${KEY}:${SECRET}" `
+    -H "Content-Type: application/json" -d "@index-mapping.json"
+  ```
+  See ERR-006.
+
+**Bedrock returns `ValidationException ... on-demand throughput isn't supported ... inference profile`**
+→ Claude 3.5+ cannot be called by its bare model ID. Set `bedrock_model_id` to an inference
+  profile ID (`us.anthropic.claude-...`) and re-run `terraform apply`. List available profiles:
+  `aws bedrock list-inference-profiles --region us-east-1`. See ERR-006.
+
 **Bedrock returns `AccessDeniedException`**
-→ Model access was not granted in `us-east-1`. Check the AWS Console → Bedrock → Model access.
-→ Confirm the Lambda IAM role has `bedrock:InvokeModel` in `iam.tf`. The policy globs the
-  Claude family (`anthropic.claude*`) — a version-specific glob would miss `claude-3-5-haiku`.
+→ Not a console "model access" issue (that page is retired). Two causes:
+  1. **IAM** — the Lambda role must allow `bedrock:InvokeModel` on both the `inference-profile/`
+     and `foundation-model/` ARNs in `iam.tf` (policy globs the Claude family `anthropic.claude*`).
+  2. **Marketplace subscription** — `...required AWS Marketplace actions (aws-marketplace:Subscribe)`
+     means the model (e.g. the default Claude Haiku 4.5) needs a one-time subscription by an
+     **admin**; the Lambda role cannot self-subscribe. Either have an admin subscribe, or fall
+     back to the already-entitled `us.anthropic.claude-opus-4-5-20251101-v1:0`. See Step 1 and ERR-006.
 
 **Bedrock returns `ResourceNotFoundException ... marked by provider as Legacy`**
-→ The configured `bedrock_model_id` is a retired model. Set it to an active model (default is
-  `anthropic.claude-3-5-haiku-20241022-v1:0`) and re-run `terraform apply`. See ERR-005.
+→ The configured `bedrock_model_id` is a retired model (Claude 3.x). Switch to an entitled active
+  model — this project defaults to `us.anthropic.claude-haiku-4-5-20251001-v1:0` (Opus 4.5 as
+  fallback) — and re-run `terraform apply`. See ERR-005 and ERR-006.
 
 **pypdf extracts empty text**
 → The PDF may be a scanned image (no embedded text). pypdf only extracts embedded text — use a PDF generated with `create_sample_pdf.py` for testing.

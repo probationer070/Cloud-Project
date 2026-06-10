@@ -1,0 +1,28 @@
+{
+  "settings": {
+    "index": {
+      "knn": true,
+      "knn.space_type": "cosinesimil"
+    }
+  },
+  "mappings": {
+    "properties": {
+      "doc_id":       { "type": "keyword" },
+      "source_key":   { "type": "keyword" },
+      "chunk_index":  { "type": "integer" },
+      "total_chunks": { "type": "integer" },
+      "text":         { "type": "text", "analyzer": "standard" },
+      "word_count":   { "type": "integer" },
+      "indexed_at":   { "type": "date" },
+      "embedding": {
+        "type":      "knn_vector",
+        "dimension": 1024,
+        "method": {
+          "name":       "hnsw",
+          "space_type": "cosinesimil",
+          "engine":     "nmslib"
+        }
+      }
+    }
+  }
+}

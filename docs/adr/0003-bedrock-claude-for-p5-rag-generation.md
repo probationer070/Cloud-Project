@@ -71,6 +71,23 @@ quality proves insufficient.
 - Bedrock model retirement is now a known maintenance risk: a pinned model ID can become
   Legacy over time and must be checked when revisiting P5.
 
+## Amendment — 2026-06-11 (post-validation)
+
+The decision (keep generation on Bedrock Claude) stands and is now **validated end-to-end**.
+Two specifics in this ADR are superseded by what live bring-up revealed (ERR-006):
+
+- **Generation model is a Claude 4.x inference profile, not Claude 3.5 Haiku.** Claude 3.5+ must
+  be invoked via an **inference profile** (the bare on-demand ID is rejected). During bring-up only
+  `us.anthropic.claude-opus-4-5-20251101-v1:0` was **entitled** (3.x is Legacy; 4.x Haiku/Sonnet
+  require an admin-only AWS Marketplace subscription), so Opus 4.5 was the initial default.
+  **Updated 26-06-11:** consistent with the Free Tier premise and the "use the cost-appropriate
+  model" intent, the default is now the ~5×-cheaper `us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+  with Opus 4.5 kept as the documented fallback if the Haiku Marketplace subscription is not active.
+- **The "two gates" in Consequences were wrong.** There is no Bedrock console "model access"
+  consent gate (that page is retired). The real gates are: (1) IAM `bedrock:InvokeModel` on both
+  the `inference-profile/` and `foundation-model/` ARNs, and (2) account **entitlement**
+  (Legacy status / Marketplace subscription).
+
 ## Related
 
 - ERR-005 — Claude 3 Haiku deprecated and IAM glob mismatch (the failure that prompted this decision)
