@@ -28,8 +28,9 @@ project2-serverless-pipeline/
 │   │   └── index.py      # SQS-triggered; validates CSV/JSON;
 │   │                     #   writes records to DynamoDB
 │   └── extractor/
-│       └── index.py      # SQS-triggered; calls Textract (PDF) /
-│                         #   Rekognition (image); writes results to S3
+│       ├── index.py      # SQS-triggered; extracts PDF text with pypdf /
+│       │                 #   Rekognition (image); writes results to S3
+│       └── requirements.txt  # pypdf (installed via uv at terraform apply)
 │
 ├── sample_data/          # Test files for manual pipeline testing
 │   ├── test.csv
@@ -49,7 +50,7 @@ project2-serverless-pipeline/
 - Router → SQS unstructured queue → Extractor Lambda (batch 5).
 - Each SQS queue has a DLQ (`maxReceiveCount=3`); CloudWatch alarms on DLQ depth.
 - Parser and Extractor share the DynamoDB table and quarantine bucket but have separate SQS-triggered roles.
-- Textract/Rekognition require `Resource: "*"` — AWS does not support resource-level ARNs for these APIs.
+- Rekognition requires `Resource: "*"` — AWS does not support resource-level ARNs for this API. (Textract was removed — unavailable on this account; PDF text now via pypdf, see ERR-003.)
 
 ## Design reference
 

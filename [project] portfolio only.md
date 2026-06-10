@@ -142,8 +142,8 @@ cost (disable WAF for ~$0 pure-dev).
 CloudWatch · **Region:** Seoul.
 
 **Purpose:** event-driven ingestion — files land in S3 (or via API), a router classifies them,
-structured data is parsed into DynamoDB, unstructured data (PDF/image) goes through
-Textract/Rekognition. Failures isolate via DLQs + a quarantine bucket.
+structured data is parsed into DynamoDB, unstructured data is split by type — PDF text via
+pypdf (in-Lambda), images via Rekognition. Failures isolate via DLQs + a quarantine bucket.
 
 ```
 Upload (S3 ObjectCreated  or  POST /upload)
@@ -164,7 +164,7 @@ Upload (S3 ObjectCreated  or  POST /upload)
 | DynamoDB `records` | PK `record_id`, GSI `source-key-index`, `PAY_PER_REQUEST`, TTL |
 | Router Lambda | py3.12, 128MB/60s; routes by extension |
 | Parser Lambda | py3.12, 256MB/300s; CSV/JSON validate → DynamoDB; SQS batch 10 |
-| Extractor Lambda | py3.12, 512MB/300s; Textract/Rekognition; SQS batch 5 |
+| Extractor Lambda | py3.12, 512MB/300s; pypdf (PDF) / Rekognition (image); SQS batch 5 |
 | API Gateway (HTTP v2) | `POST /upload` → Router (AWS_PROXY, payload v2.0) |
 
 **Event flow internals:** the Router is the only synchronous-on-event component; everything
@@ -174,7 +174,7 @@ inputs the router can't classify, keeping the happy path clean.
 
 **IAM & security analysis:** each of the three Lambdas has its own scoped role (`iam.tf`) —
 the Router can enqueue but not write DynamoDB; the Parser writes DynamoDB but doesn't call
-Textract; etc. All buckets private + AES256; quarantine isolates untrusted input.
+Rekognition; etc. All buckets private + AES256; quarantine isolates untrusted input.
 
 **Cost:** effectively $0–1/mo on free tier (DynamoDB pay-per-request, Lambda/SQS free tier).
 
@@ -341,7 +341,7 @@ on their deployed infrastructure**. Each project deploys and destroys independen
 | Eventing/schedule | — | S3 events | EventBridge cron | — |
 | API | — | API GW HTTP | API GW REST (key) | API GW HTTP |
 | Edge/CDN | CloudFront + WAF | — | — | CloudFront + OAC |
-| AI/ML | — | Textract/Rekognition | — | Gemini / Bedrock |
+| AI/ML | — | Rekognition (pypdf for PDF) | — | Gemini / Bedrock |
 | Secrets | — | — | API key (tfvars/SSM) | SSM SecureString |
 | Multi-region/DR | us-east-1 (WAF) | — | Singapore DR | — |
 | Least-privilege IAM | bucket policy | per-Lambda | per-Lambda | per-Lambda |

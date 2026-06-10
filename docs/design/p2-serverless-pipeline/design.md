@@ -8,8 +8,12 @@
 
 Event-driven ingestion pipeline. Files land in S3 (or via API), a router
 classifies them, structured data is parsed into DynamoDB, and unstructured data
-(PDF/image) is sent through Textract/Rekognition. Failures are isolated via DLQs
-and a quarantine bucket.
+is handled per type — PDF text is extracted in-Lambda with **pypdf**, images go
+through **Rekognition**. Failures are isolated via DLQs and a quarantine bucket.
+
+> Textract was the original PDF extractor but is unavailable on this account
+> (account-level subscription restriction, no self-service fix — see ERR-003), so the
+> PDF path uses pypdf instead. Same decision as P5.
 
 ## Architecture
 
@@ -34,7 +38,7 @@ Upload (S3 ObjectCreated  or  POST /upload)
 | DynamoDB `records` | PK `record_id`, GSI `source-key-index`, `PAY_PER_REQUEST`, TTL on `ttl` | `main.tf:159-187` |
 | Router Lambda | py3.12, 128MB/60s; routes by file extension | `main.tf:231-250` |
 | Parser Lambda | py3.12, 256MB/300s; CSV/JSON validate → DynamoDB; SQS-triggered batch 10 | `main.tf:273-299` |
-| Extractor Lambda | py3.12, 512MB/300s; Textract/Rekognition; SQS-triggered batch 5 | `main.tf:302-329` |
+| Extractor Lambda | py3.12, 512MB/300s; pypdf (PDF) / Rekognition (image); SQS-triggered batch 5 | `main.tf` |
 | API Gateway (HTTP v2) | `POST /upload` → Router (AWS_PROXY, payload v2.0) | `main.tf:335-369` |
 | CloudWatch | per-Lambda error alarms, DLQ-depth alarms, dashboard | `main.tf:376-493` |
 | IAM | one least-privilege role per Lambda | `iam.tf` |

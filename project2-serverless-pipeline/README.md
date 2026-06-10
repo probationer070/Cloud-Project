@@ -21,7 +21,7 @@ File upload (S3 ObjectCreated  or  POST /upload)
 | S3 (3 buckets) | 5 GB / 20,000 GET | free |
 | SQS | 1M requests/mo | free |
 | DynamoDB | 25 GB / PAY_PER_REQUEST | free |
-| Textract | 1,000 pages/mo | $1.5/1,000 pages over limit |
+| pypdf (PDF text) | in-Lambda, free | No AWS service — runs inside the Extractor Lambda (Textract is unavailable on this account, see ERR-003) |
 | Rekognition | 5,000 images/mo | $1/1,000 images over limit |
 
 > ~$0–1/mo at test scale.
@@ -100,17 +100,19 @@ aws s3 cp sample_data/test.xyz s3://[ingestion_bucket]/test.xyz
 aws s3 ls s3://[quarantine_bucket]/ --recursive
 ```
 
-### 4. PDF Upload → Textract Extraction
+### 4. PDF Upload → pypdf Text Extraction
 
 ```powershell
 # Run the test_pdf_upload output command (prepare a PDF first)
 aws s3 cp sample_data/test.pdf s3://[ingestion_bucket]/test.pdf
 
-# Verify JSON result in processed bucket (allow 10–30 seconds)
+# Verify JSON result in processed bucket (allow a few seconds)
 aws s3 ls s3://[processed_bucket]/results/ --recursive
 ```
 
-> Textract processes single-page PDFs synchronously. Multi-page PDFs require the async API.
+> PDF text is extracted **in-Lambda with pypdf** — Amazon Textract is unavailable on this
+> account (account-level subscription restriction, no self-service fix; see ERR-003). pypdf reads
+> embedded text from any text-based PDF; scanned / image-only PDFs return no text (pypdf does no OCR).
 
 ### 5. API Gateway Upload Test
 
@@ -163,7 +165,7 @@ Open dashboard_url from terraform output
 
 **Lambda AccessDenied**
 → Check the Lambda policy in `iam.tf`
-→ Textract and Rekognition require `Resource = "*"`
+→ Rekognition requires `Resource = "*"`
 
 **SQS trigger not firing**
 → Check the Event Source Mapping status:
@@ -171,9 +173,9 @@ Open dashboard_url from terraform output
 aws lambda list-event-source-mappings --function-name p2-pipeline-parser
 ```
 
-**Textract page count error**
-→ `detect_document_text` handles single pages only
-→ Multi-page PDFs need `start_document_text_detection` (async)
+**PDF result has empty text**
+→ pypdf only reads embedded text — it does no OCR
+→ A scanned / image-only PDF yields no text; use a text-based PDF
 
 ---
 

@@ -55,13 +55,13 @@ File upload (S3 ObjectCreated  or  POST /upload)
 | AWS Service | Role | When it runs |
 |-----------|------|-----------|
 | S3 ingestion | Receives uploads | ObjectCreated → triggers Router Lambda |
-| S3 processed | Stores Textract/Rekognition results (auto-deleted after 90 days) | When Extractor Lambda completes |
+| S3 processed | Stores pypdf/Rekognition results (auto-deleted after 90 days) | When Extractor Lambda completes |
 | S3 quarantine | Isolates unsupported/failed files | On Router/Parser/Extractor errors |
 | SQS structured queue + DLQ | Buffers CSV/JSON; 3 failures → DLQ | When Router sends a message |
 | SQS unstructured queue + DLQ | Buffers PDF/image | When Router sends a message |
 | Lambda Router | Detects file extension → sends to queue or quarantine | On S3 ObjectCreated event |
 | Lambda Parser | Validates CSV/JSON → stores in DynamoDB | SQS structured queue (batch 10) |
-| Lambda Extractor | Textract (PDF) / Rekognition (image) → stores in S3 | SQS unstructured queue (batch 5) |
+| Lambda Extractor | pypdf (PDF text) / Rekognition (image) → stores in S3 | SQS unstructured queue (batch 5) |
 | DynamoDB | Stores parsed result records (`PAY_PER_REQUEST`, TTL) | When Parser/Extractor completes |
 | API Gateway (HTTP v2) | External file-intake endpoint `POST /upload` | On external client calls |
 | CloudWatch | Monitors Lambda errors and DLQ depth | 5-min aggregation; alarms when thresholds are exceeded |

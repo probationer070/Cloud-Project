@@ -217,10 +217,19 @@ data "archive_file" "parser" {
   output_path = "${path.module}/.terraform/lambda-parser.zip"
 }
 
+# pypdf 의존성을 디렉터리에 설치한 뒤 디렉터리 전체를 zip (P5 패턴 동일)
+resource "terraform_data" "install_extractor_deps" {
+  triggers_replace = [filemd5("${path.module}/lambda/extractor/requirements.txt")]
+  provisioner "local-exec" {
+    command = "uv pip install -r ${path.module}/lambda/extractor/requirements.txt --target ${path.module}/lambda/extractor --quiet"
+  }
+}
+
 data "archive_file" "extractor" {
   type        = "zip"
-  source_file = "${path.module}/lambda/extractor/index.py"
+  source_dir  = "${path.module}/lambda/extractor"
   output_path = "${path.module}/.terraform/lambda-extractor.zip"
+  depends_on  = [terraform_data.install_extractor_deps]
 }
 
 ########################################################
@@ -307,7 +316,7 @@ resource "aws_lambda_function" "extractor" {
   filename         = data.archive_file.extractor.output_path
   source_code_hash = data.archive_file.extractor.output_base64sha256
   timeout          = 300
-  memory_size      = 512 # Textract/Rekognition 응답이 크므로 넉넉하게
+  memory_size      = 512 # pypdf 파싱 + Rekognition 응답 처리를 위해 넉넉하게
 
   environment {
     variables = {

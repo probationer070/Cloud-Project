@@ -1,0 +1,5 @@
+# uv-installed Lambda dependencies (installed at terraform apply via terraform_data)
+pypdf/
+pypdf-*/
+*.dist-info/
+__pycache__/

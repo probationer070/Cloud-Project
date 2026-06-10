@@ -5,12 +5,12 @@ Extractor Lambda — 비정형 데이터 처리 (안전성 보안 버전)
 import json
 import os
 import uuid
-import time
+import io
 import boto3
+import pypdf
 from datetime import datetime, timezone
 
 s3           = boto3.client("s3")
-textract     = boto3.client("textract")
 rekognition  = boto3.client("rekognition")
 dynamodb     = boto3.resource("dynamodb")
 sns          = boto3.client("sns")
@@ -38,7 +38,7 @@ def lambda_handler(event, context):
 
         try:
             if ext == ".pdf":
-                result = extract_pdf_async(bucket, key)
+                result = extract_pdf(bucket, key)
             elif ext in IMAGE_TYPES:
                 result = extract_image(bucket, key)
             else:
@@ -78,63 +78,26 @@ def lambda_handler(event, context):
             quarantine(bucket, key, str(e))
             notify_error(key, str(e))
 
-# ── PDF: Textract 비동기 분석 및 내부 Polling ─────────────────────────
-def extract_pdf_async(bucket: str, key: str) -> dict:
-    print(f"[Textract] {key} 파일의 비동기 작업 시작 요청")
-    try:
-        start_response = textract.start_document_text_detection(
-            DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}}
-        )
-    except textract.exceptions.InvalidParameterException:
-        raise RuntimeError(f"Textract가 S3 오브젝트를 찾을 수 없거나 접근할 수 없습니다: s3://{bucket}/{key}")
-        
-    job_id = start_response["JobId"]
-    print(f"[Textract] 작업 시작 성공. JobId: {job_id}")
+# ── PDF: pypdf 텍스트 추출 (Textract 대체 — 계정 레벨 구독 불가, ERR-003) ──
+def extract_pdf(bucket: str, key: str) -> dict:
+    print(f"[pypdf] {key} 파일 텍스트 추출 시작")
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    pdf_bytes = obj["Body"].read()
+    reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
 
-    # Polling 루프 실행
-    status = "IN_PROGRESS"
-    while status == "IN_PROGRESS":
-        print(f"[Textract] Job 상태 확인 중... (JobId: {job_id})")
-        time.sleep(5)  # API 호출 제한 방지를 위해 5초로 소폭 상향
-        
-        check_response = textract.get_document_text_detection(JobId=job_id)
-        print(json.dumps(check_response, default=str))
-        status = check_response["JobStatus"]
-        
-        if status == "SUCCEEDED":
-            print("[Textract] 🎉 분석 완료 성공!")
-            break
-        elif status == "FAILED":
-            raise RuntimeError(f"Textract 비동기 작업 실패 (JobId: {job_id})")
+    pages = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            pages.append(text)
 
-    lines = []
-    words = []
-    pages = 0
-    next_token = None
-    
-    # 페이지네이션 처리 루프
-    while True:
-        params = {"JobId": job_id}
-        if next_token:
-            params["NextToken"] = next_token
-            
-        result_page = textract.get_document_text_detection(**params)
-        blocks = result_page.get("Blocks", [])
-        
-        lines.extend([b["Text"] for b in blocks if b["BlockType"] == "LINE"])
-        words.extend([b["Text"] for b in blocks if b["BlockType"] == "WORD"])
-        pages = result_page.get("DocumentMetadata", {}).get("Pages", 1)
-        
-        next_token = result_page.get("NextToken")
-        if not next_token:
-            break
-
+    full_text = "\n".join(pages)
     return {
         "type":       "pdf",
         "source_key": key,
-        "text":       "\n".join(lines),
-        "word_count": len(words),
-        "page_count": pages,
+        "text":       full_text,
+        "word_count": len(full_text.split()),
+        "page_count": len(reader.pages),
         "extracted_at": datetime.now(timezone.utc).isoformat(),
     }
 

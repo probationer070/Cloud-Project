@@ -165,13 +165,10 @@ resource "aws_iam_policy" "extractor_custom" {
         ]
       },
       {
-        # Textract & Rekognition 권한 (AI 서비스는 리소스 단위 제어가 불가능하므로 "*" 필수)
+        # Rekognition 권한 (AI 서비스는 리소스 단위 제어가 불가능하므로 "*" 필수)
+        # Textract는 계정 레벨 구독 불가로 제거, PDF는 pypdf로 처리 (ERR-003)
         Effect = "Allow"
         Action = [
-          "textract:DetectDocumentText",
-          "textract:AnalyzeDocument",
-          "textract:StartDocumentTextDetection",
-          "textract:GetDocumentTextDetection",
           "rekognition:DetectLabels",
           "rekognition:DetectText"
         ]
