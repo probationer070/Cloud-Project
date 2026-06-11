@@ -76,11 +76,11 @@ Both Lambda functions are deployed as **zip packages**, not container images. Do
 | | Ingest | Query |
 |---|---|---|
 | Deployment method | zip (`archive_file`) | zip (`archive_file`) |
-| Dependency install | `uv pip install` runs locally during `terraform apply` | none (no extra deps) |
+| Dependency install | `python -m pip install` runs locally during `terraform apply` | none (no extra deps) |
 | Dockerfile | present — unused | present — unused |
 
 **How zip deployment works (Terraform):**
-1. `terraform_data` runs `uv pip install -r requirements.txt --target lambda/ingest/` on your local machine
+1. `terraform_data` runs `python -m pip install -r requirements.txt --target lambda/ingest/` on your local machine
 2. `archive_file` zips the entire `lambda/ingest/` directory (code + installed packages)
 3. The zip is uploaded to Lambda as the deployment package
 
@@ -269,8 +269,10 @@ curl -X POST $API \
 Expected response:
 ```json
 {
-  "answer": "According to the document, Q4 Revenue hit 2 million...",
-  "sources": [{"chunk_id": "sample.pdf-chunk-3", "score": 0.94}]
+  "answer": "According to the document, the Q4 revenue reached $2,000,000, representing a 35% year-over-year growth compared to Q4 2023...\n\nSources: sample.pdf",
+  "sources": ["sample.pdf"],
+  "chunks_used": 5,
+  "question": "What was the Q4 revenue?"
 }
 ```
 

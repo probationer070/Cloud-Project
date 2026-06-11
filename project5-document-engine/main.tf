@@ -157,7 +157,7 @@ resource "terraform_data" "install_ingest_deps" {
   triggers_replace = [filemd5("${path.module}/lambda/ingest/requirements.txt")]
 
   provisioner "local-exec" {
-    command = "uv pip install -r ${path.module}/lambda/ingest/requirements.txt --target ${path.module}/lambda/ingest --quiet"
+    command = "python -m pip install -r ${path.module}/lambda/ingest/requirements.txt --target ${path.module}/lambda/ingest --quiet"
   }
 }
 

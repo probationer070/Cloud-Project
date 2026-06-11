@@ -1,0 +1,10 @@
+﻿{
+    "max_tokens":  20,
+    "messages":  [
+                     {
+                         "content":  "Say OK",
+                         "role":  "user"
+                     }
+                 ],
+    "anthropic_version":  "bedrock-2023-05-31"
+}

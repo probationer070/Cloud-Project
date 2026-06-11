@@ -153,19 +153,19 @@ def generate_answer(question: str, chunks: list[dict]) -> str:
         context_parts.append(f"[출처 {i}: {source}]\n{chunk['text']}")
     context = "\n\n---\n\n".join(context_parts)
 
-    prompt = f"""당신은 문서 분석 전문가입니다. 아래 제공된 문서 내용만을 근거로 질문에 답변하세요.
+    prompt = f"""You are a document analysis expert. Answer the question using only the document content provided below.
 
-[문서 내용]
+[Document Content]
 {context}
 
-[질문]
+[Question]
 {question}
 
-[답변 규칙]
-- 반드시 위 문서 내용에 근거해서만 답변하세요
-- 문서에 없는 내용은 "문서에서 확인할 수 없습니다"라고 하세요
-- 답변 마지막에 참고한 출처를 명시하세요
-- 간결하고 명확하게 답변하세요"""
+[Answer Rules]
+- Base your answer strictly on the document content above
+- If the information is not in the document, say "This information is not available in the provided documents"
+- Cite the sources you referenced at the end of your answer
+- Be concise and clear"""
 
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
